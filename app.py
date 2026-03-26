@@ -46,7 +46,7 @@ if not st.session_state.user:
                     "email": email,
                     "password": senha
                 })
-                st.success("Usuário criado! Agora clique em entrar.")
+                st.success("Usuário criado! Verifique seu email para confirmar antes de entrar.")
             except Exception as e:
                 st.error(f"Erro ao cadastrar: {e}")
 
