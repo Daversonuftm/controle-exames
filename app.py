@@ -9,6 +9,11 @@ from supabase import create_client
 url = "https://dpouzkapdaipnfnlsrio.supabase.co"
 key = "sb_publishable_hhN-A_o0Q9Y6o8lTGr2xCw_iBbSSXca"
 supabase = create_client(url, key)
+if st.session_state.user:
+    supabase.auth.set_session(
+        st.session_state.user.session.access_token,
+        st.session_state.user.session.refresh_token
+    )
 
 st.set_page_config(page_title="Controle de Exames", layout="wide")
 
