@@ -53,7 +53,7 @@ if not st.session_state.user:
 
     st.stop()
 
-# ✅ AQUI É A CORREÇÃO (NÃO MEXER)
+# SESSÃO SUPABASE
 if st.session_state.user:
     supabase.auth.set_session(
         st.session_state.user.session.access_token,
@@ -164,12 +164,26 @@ def ler_pdf(arquivo):
 
     prontuario_registro = None
 
-    match_prontuario = re.search(r'Prontu[aá]rio[:\s]*([0-9/]+)', texto, re.IGNORECASE)
+    match_prontuario = re.search(
+        r'Prontu[aá]rio[:\s]*([0-9/]+)',
+        texto,
+        re.IGNORECASE
+    )
+
     if match_prontuario:
-        prontuario_registro = re.sub(r'\D', '', match_prontuario.group(1))
+        prontuario_registro = re.sub(
+            r'\D',
+            '',
+            match_prontuario.group(1)
+        )
 
     if not prontuario_registro:
-        match_registro = re.search(r'Registro.*?([0-9]{5,})', texto, re.IGNORECASE)
+        match_registro = re.search(
+            r'Registro.*?([0-9]{5,})',
+            texto,
+            re.IGNORECASE
+        )
+
         if match_registro:
             prontuario_registro = match_registro.group(1)
 
@@ -191,7 +205,11 @@ def calcular_status(data_vencimento):
 
 # ================= BANCO =================
 
-res = supabase.table("exames").select("*").eq("hospital_id", user_id).execute()
+res = supabase.table("exames").select("*").eq(
+    "hospital_id",
+    user_id
+).execute()
+
 df = pd.DataFrame(res.data)
 
 # ================= DASHBOARD =================
@@ -204,6 +222,7 @@ else:
     vencidos = alerta = validos = 0
 
 c1, c2, c3 = st.columns(3)
+
 c1.metric("🔴 VENCIDOS", vencidos)
 c2.metric("🟡 EM ALERTA", alerta)
 c3.metric("🟢 VÁLIDOS", validos)
@@ -212,7 +231,11 @@ st.divider()
 
 # ================= UPLOAD =================
 
-arquivos = st.file_uploader("Selecionar PDFs", type=["pdf"], accept_multiple_files=True)
+arquivos = st.file_uploader(
+    "Selecionar PDFs",
+    type=["pdf"],
+    accept_multiple_files=True
+)
 
 if st.button("Ler exames"):
 
@@ -229,6 +252,7 @@ if st.button("Ler exames"):
                 continue
 
             data_vencimento = data_exame + timedelta(days=180)
+
             status = calcular_status(data_vencimento)
 
             supabase.table("exames").insert({
@@ -254,7 +278,6 @@ if not df.empty:
     df["Excluir"] = False
 
     colunas = [
-        "id",
         "cpf",
         "paciente",
         "prontuario_registro",
@@ -265,14 +288,25 @@ if not df.empty:
         "Excluir"
     ]
 
-    tabela = st.data_editor(df[colunas], use_container_width=True)
+    tabela = st.data_editor(
+        df[colunas],
+        use_container_width=True
+    )
 
     if st.button("Salvar alterações"):
 
-        excluir_ids = tabela[tabela["Excluir"] == True]["id"].tolist()
+        excluir_index = tabela[
+            tabela["Excluir"] == True
+        ].index.tolist()
 
-        for id_excluir in excluir_ids:
-            supabase.table("exames").delete().eq("id", id_excluir).execute()
+        for index in excluir_index:
+
+            id_excluir = df.loc[index, "id"]
+
+            supabase.table("exames").delete().eq(
+                "id",
+                id_excluir
+            ).execute()
 
         st.success("Alterações salvas")
         st.rerun()
