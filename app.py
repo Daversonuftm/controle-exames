@@ -148,16 +148,27 @@ def ler_pdf(arquivo):
     for padrao in padroes_data:
         match = re.search(padrao, texto, re.IGNORECASE)
         if match:
-            data_exame = datetime.strptime(match.group(1), "%d/%m/%Y")
+            data_exame = datetime.strptime(
+                match.group(1),
+                "%d/%m/%Y"
+            )
             break
 
     if not data_exame:
         for linha in texto.split("\n"):
             if "nasc" in linha.lower():
                 continue
-            match = re.search(r'\d{2}/\d{2}/\d{4}', linha)
+
+            match = re.search(
+                r'\d{2}/\d{2}/\d{4}',
+                linha
+            )
+
             if match:
-                data_exame = datetime.strptime(match.group(0), "%d/%m/%Y")
+                data_exame = datetime.strptime(
+                    match.group(0),
+                    "%d/%m/%Y"
+                )
                 break
 
     tipo_exame = identificar_exame(texto)
@@ -187,7 +198,13 @@ def ler_pdf(arquivo):
         if match_registro:
             prontuario_registro = match_registro.group(1)
 
-    return cpf, nome, data_exame, tipo_exame, prontuario_registro
+    return (
+        cpf,
+        nome,
+        data_exame,
+        tipo_exame,
+        prontuario_registro
+    )
 
 
 def calcular_status(data_vencimento):
@@ -215,9 +232,17 @@ df = pd.DataFrame(res.data)
 # ================= DASHBOARD =================
 
 if not df.empty:
-    vencidos = len(df[df["status"].str.contains("VENCIDO")])
-    alerta = len(df[df["status"].str.contains("ALERTA")])
-    validos = len(df[df["status"].str.contains("VALIDO")])
+    vencidos = len(
+        df[df["status"].str.contains("VENCIDO")]
+    )
+
+    alerta = len(
+        df[df["status"].str.contains("ALERTA")]
+    )
+
+    validos = len(
+        df[df["status"].str.contains("VALIDO")]
+    )
 else:
     vencidos = alerta = validos = 0
 
@@ -226,6 +251,58 @@ c1, c2, c3 = st.columns(3)
 c1.metric("🔴 VENCIDOS", vencidos)
 c2.metric("🟡 EM ALERTA", alerta)
 c3.metric("🟢 VÁLIDOS", validos)
+
+# ================= ATUALIZAR STATUS =================
+
+if "ultima_atualizacao" not in st.session_state:
+    st.session_state.ultima_atualizacao = None
+
+if st.button(" Atualizar status"):
+
+    try:
+
+        exames_atualizados = supabase.table(
+            "exames"
+        ).select(
+            "id, data_vencimento"
+        ).eq(
+            "hospital_id",
+            user_id
+        ).execute()
+
+        for exame in exames_atualizados.data:
+
+            data_vencimento = datetime.strptime(
+                exame["data_vencimento"],
+                "%d/%m/%Y"
+            )
+
+            novo_status = calcular_status(
+                data_vencimento
+            )
+
+            supabase.table("exames").update({
+                "status": novo_status
+            }).eq(
+                "id",
+                exame["id"]
+            ).execute()
+
+        st.session_state.ultima_atualizacao = datetime.now()
+
+        st.rerun()
+
+    except Exception as e:
+        st.error(
+            f"Erro ao atualizar os status: {e}"
+        )
+
+if st.session_state.ultima_atualizacao:
+
+    st.caption(
+        f"Atualizado em: "
+        f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M')}"
+    )
 
 st.divider()
 
@@ -243,17 +320,30 @@ if st.button("Ler exames"):
         st.warning("Selecione PDFs")
 
     else:
+
         for arquivo in arquivos:
 
-            cpf, nome, data_exame, tipo_exame, prontuario = ler_pdf(arquivo)
+            (
+                cpf,
+                nome,
+                data_exame,
+                tipo_exame,
+                prontuario
+            ) = ler_pdf(arquivo)
 
             if not data_exame:
-                st.warning(f"Data não encontrada em {arquivo.name}")
+                st.warning(
+                    f"Data não encontrada em {arquivo.name}"
+                )
                 continue
 
-            data_vencimento = data_exame + timedelta(days=180)
+            data_vencimento = (
+                data_exame + timedelta(days=180)
+            )
 
-            status = calcular_status(data_vencimento)
+            status = calcular_status(
+                data_vencimento
+            )
 
             supabase.table("exames").insert({
                 "hospital_id": user_id,
@@ -261,8 +351,12 @@ if st.button("Ler exames"):
                 "paciente": nome,
                 "prontuario_registro": prontuario,
                 "exame": tipo_exame,
-                "data_exame": data_exame.strftime("%d/%m/%Y"),
-                "data_vencimento": data_vencimento.strftime("%d/%m/%Y"),
+                "data_exame": data_exame.strftime(
+                    "%d/%m/%Y"
+                ),
+                "data_vencimento": data_vencimento.strftime(
+                    "%d/%m/%Y"
+                ),
                 "status": status
             }).execute()
 
@@ -301,7 +395,10 @@ if not df.empty:
 
         for index in excluir_index:
 
-            id_excluir = df.loc[index, "id"]
+            id_excluir = df.loc[
+                index,
+                "id"
+            ]
 
             supabase.table("exames").delete().eq(
                 "id",
@@ -312,4 +409,5 @@ if not df.empty:
         st.rerun()
 
 else:
+
     st.info("Nenhum exame cadastrado")
