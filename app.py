@@ -257,7 +257,7 @@ c3.metric("🟢 VÁLIDOS", validos)
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
-if st.button("Atualizar status"):
+if st.button(" Atualizar status"):
 
     try:
 
@@ -373,7 +373,7 @@ if not df.empty:
 
     # ================= FILTRO =================
 
-    with st.popover("Filtrar exames"):
+    with st.popover("🔎 Filtrar exames"):
 
         filtro = st.radio(
             "Mostrar:",
@@ -385,6 +385,8 @@ if not df.empty:
             ],
             index=0
         )
+
+    st.caption(f"Filtro atual: {filtro}")
 
     if filtro == "🔴 Vencidos":
 
