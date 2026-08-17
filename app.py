@@ -373,7 +373,7 @@ if not df.empty:
 
     # ================= FILTRO =================
 
-    with st.popover("🔎 Filtrar exames"):
+    with st.popover("Filtrar exames"):
 
         filtro = st.radio(
             "Mostrar:",
