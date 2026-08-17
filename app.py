@@ -448,4 +448,3 @@ if not df.empty:
 else:
 
     st.info("Nenhum exame cadastrado")
-```
