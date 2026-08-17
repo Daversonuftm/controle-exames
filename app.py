@@ -3,6 +3,7 @@ import pandas as pd
 import pdfplumber
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from supabase import create_client
 
 # 🔑 SUPABASE
@@ -288,7 +289,10 @@ if st.button(" Atualizar status"):
                 exame["id"]
             ).execute()
 
-        st.session_state.ultima_atualizacao = datetime.now()
+        # HORÁRIO ATUAL DO BRASIL
+        st.session_state.ultima_atualizacao = datetime.now(
+            ZoneInfo("America/Sao_Paulo")
+        )
 
         st.rerun()
 
@@ -373,7 +377,7 @@ if not df.empty:
 
     # ================= FILTRO =================
 
-    with st.popover("Filtrar exames"):
+    with st.popover("🔎 Filtrar exames"):
 
         filtro = st.radio(
             "Mostrar:",
