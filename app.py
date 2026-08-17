@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import pdfplumber
@@ -257,7 +258,7 @@ c3.metric("🟢 VÁLIDOS", validos)
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
-if st.button(" Atualizar status"):
+if st.button("Atualizar status"):
 
     try:
 
@@ -371,6 +372,43 @@ if not df.empty:
 
     df["Excluir"] = False
 
+    # ================= FILTRO =================
+
+    with st.popover("Filtrar exames"):
+
+        filtro = st.radio(
+            "Mostrar:",
+            [
+                "Todos os exames",
+                "🔴 Vencidos",
+                "🟡 Em alerta",
+                "🟢 Válidos"
+            ],
+            index=0
+        )
+
+    if filtro == "🔴 Vencidos":
+
+        df_tabela = df[
+            df["status"].str.contains("VENCIDO")
+        ]
+
+    elif filtro == "🟡 Em alerta":
+
+        df_tabela = df[
+            df["status"].str.contains("ALERTA")
+        ]
+
+    elif filtro == "🟢 Válidos":
+
+        df_tabela = df[
+            df["status"].str.contains("VALIDO")
+        ]
+
+    else:
+
+        df_tabela = df
+
     colunas = [
         "cpf",
         "paciente",
@@ -383,7 +421,7 @@ if not df.empty:
     ]
 
     tabela = st.data_editor(
-        df[colunas],
+        df_tabela[colunas],
         use_container_width=True
     )
 
@@ -411,3 +449,4 @@ if not df.empty:
 else:
 
     st.info("Nenhum exame cadastrado")
+```
