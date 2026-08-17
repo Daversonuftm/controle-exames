@@ -301,7 +301,7 @@ if st.session_state.ultima_atualizacao:
 
     st.caption(
         f"Atualizado em: "
-        f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M')}"
+        f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')}"
     )
 
 st.divider()
