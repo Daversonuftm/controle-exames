@@ -505,11 +505,11 @@ st.divider()
 
 # ================= BOTÃO SAIR =================
 
-col_sair, col_vazia = st.columns([1, 5])
+col_vazia, col_sair = st.columns([5, 1])
 
 with col_sair:
 
-    if st.button("🚪 Sair"):
+    if st.button("Sair"):
 
         if st.session_state.exclusoes_pendentes:
 
@@ -538,7 +538,7 @@ if st.session_state.confirmar_saida:
         "Se você sair agora, essas alterações serão perdidas."
     )
 
-    col_continuar, col_sair = st.columns(2)
+    col_continuar, col_sair_confirmar = st.columns(2)
 
     with col_continuar:
 
@@ -548,7 +548,7 @@ if st.session_state.confirmar_saida:
 
             st.rerun()
 
-    with col_sair:
+    with col_sair_confirmar:
 
         if st.button("Sair sem salvar"):
 
