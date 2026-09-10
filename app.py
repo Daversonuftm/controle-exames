@@ -73,10 +73,10 @@ def identificar_exame(texto):
     linhas = texto.split("\n")
 
     palavras_chave = [
-        "ELETROCARDIOGRAMA","ULTRASSONOGRAFIA","ENDOSCOPIA",
-        "ECOCARDIOGRAMA","TESTE ERGOMÉTRICO","TESTE ERGOMETRICO",
-        "DOPPLER","HEMODINÂMICO","HEMODINAMICO",
-        "CORONARIOGRAFIA","CATETERISMO"
+        "ELETROCARDIOGRAMA", "ULTRASSONOGRAFIA", "ENDOSCOPIA",
+        "ECOCARDIOGRAMA", "TESTE ERGOMÉTRICO", "TESTE ERGOMETRICO",
+        "DOPPLER", "HEMODINÂMICO", "HEMODINAMICO",
+        "CORONARIOGRAFIA", "CATETERISMO"
     ]
 
     for linha in linhas:
@@ -104,7 +104,10 @@ def identificar_exame(texto):
 
 def limpar_nome(nome):
     nome = nome.split("\n")[0]
-    nome = re.split(r'Origem|Sexo|Idade|Nascimento|Dt\.|Convênio', nome)[0]
+    nome = re.split(
+        r'Origem|Sexo|Idade|Nascimento|Dt\.|Convênio',
+        nome
+    )[0]
     return nome.strip()
 
 
@@ -119,7 +122,12 @@ def ler_pdf(arquivo):
                 texto += conteudo + "\n"
 
     cpf = None
-    cpf_match = re.search(r'CPF[:\s]*([0-9\.\-]{11,14})', texto)
+
+    cpf_match = re.search(
+        r'CPF[:\s]*([0-9\.\-]{11,14})',
+        texto
+    )
+
     if cpf_match:
         cpf = cpf_match.group(1)
 
@@ -133,8 +141,11 @@ def ler_pdf(arquivo):
 
     for padrao in padroes_nome:
         match = re.search(padrao, texto)
+
         if match:
-            nome = limpar_nome(match.group(1).strip())
+            nome = limpar_nome(
+                match.group(1).strip()
+            )
             break
 
     data_exame = None
@@ -147,7 +158,13 @@ def ler_pdf(arquivo):
     ]
 
     for padrao in padroes_data:
-        match = re.search(padrao, texto, re.IGNORECASE)
+
+        match = re.search(
+            padrao,
+            texto,
+            re.IGNORECASE
+        )
+
         if match:
             data_exame = datetime.strptime(
                 match.group(1),
@@ -156,7 +173,9 @@ def ler_pdf(arquivo):
             break
 
     if not data_exame:
+
         for linha in texto.split("\n"):
+
             if "nasc" in linha.lower():
                 continue
 
@@ -166,10 +185,12 @@ def ler_pdf(arquivo):
             )
 
             if match:
+
                 data_exame = datetime.strptime(
                     match.group(0),
                     "%d/%m/%Y"
                 )
+
                 break
 
     tipo_exame = identificar_exame(texto)
@@ -183,6 +204,7 @@ def ler_pdf(arquivo):
     )
 
     if match_prontuario:
+
         prontuario_registro = re.sub(
             r'\D',
             '',
@@ -190,6 +212,7 @@ def ler_pdf(arquivo):
         )
 
     if not prontuario_registro:
+
         match_registro = re.search(
             r'Registro.*?([0-9]{5,})',
             texto,
@@ -210,12 +233,21 @@ def ler_pdf(arquivo):
 
 def calcular_status(data_vencimento):
 
-    hoje = datetime.today()
+    hoje = datetime.now(
+        ZoneInfo("America/Sao_Paulo")
+    ).date()
 
-    if hoje > data_vencimento:
+    if isinstance(data_vencimento, datetime):
+        data_vencimento = data_vencimento.date()
+
+    dias_para_vencer = (
+        data_vencimento - hoje
+    ).days
+
+    if dias_para_vencer < 0:
         return "🔴 VENCIDO"
 
-    if (data_vencimento - hoje).days <= 30:
+    if dias_para_vencer <= 30:
         return "🟡 EM ALERTA"
 
     return "🟢 VALIDO"
@@ -230,22 +262,70 @@ res = supabase.table("exames").select("*").eq(
 
 df = pd.DataFrame(res.data)
 
+# ================= ATUALIZAÇÃO AUTOMÁTICA DOS STATUS =================
+
+if not df.empty:
+
+    for index, exame in df.iterrows():
+
+        try:
+
+            data_vencimento = datetime.strptime(
+                exame["data_vencimento"],
+                "%d/%m/%Y"
+            )
+
+            novo_status = calcular_status(
+                data_vencimento
+            )
+
+            status_atual = exame.get("status")
+
+            if status_atual != novo_status:
+
+                supabase.table("exames").update({
+                    "status": novo_status
+                }).eq(
+                    "id",
+                    exame["id"]
+                ).execute()
+
+                df.loc[index, "status"] = novo_status
+
+        except Exception:
+            pass
+
 # ================= DASHBOARD =================
 
 if not df.empty:
+
     vencidos = len(
-        df[df["status"].str.contains("VENCIDO")]
+        df[df["status"].str.contains(
+            "VENCIDO",
+            na=False
+        )]
     )
 
     alerta = len(
-        df[df["status"].str.contains("ALERTA")]
+        df[df["status"].str.contains(
+            "ALERTA",
+            na=False
+        )]
     )
 
     validos = len(
-        df[df["status"].str.contains("VALIDO")]
+        df[df["status"].str.contains(
+            "VALIDO",
+            na=False
+        )]
     )
+
 else:
-    vencidos = alerta = validos = 0
+
+    vencidos = 0
+    alerta = 0
+    validos = 0
+
 
 c1, c2, c3 = st.columns(3)
 
@@ -257,6 +337,7 @@ c3.metric("🟢 VÁLIDOS", validos)
 
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
+
 
 if st.button(" Atualizar status"):
 
@@ -289,7 +370,6 @@ if st.button(" Atualizar status"):
                 exame["id"]
             ).execute()
 
-        # HORÁRIO ATUAL DO BRASIL
         st.session_state.ultima_atualizacao = datetime.now(
             ZoneInfo("America/Sao_Paulo")
         )
@@ -297,9 +377,11 @@ if st.button(" Atualizar status"):
         st.rerun()
 
     except Exception as e:
+
         st.error(
             f"Erro ao atualizar os status: {e}"
         )
+
 
 if st.session_state.ultima_atualizacao:
 
@@ -307,6 +389,7 @@ if st.session_state.ultima_atualizacao:
         f"Atualizado em: "
         f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')}"
     )
+
 
 st.divider()
 
@@ -318,9 +401,11 @@ arquivos = st.file_uploader(
     accept_multiple_files=True
 )
 
+
 if st.button("Ler exames"):
 
     if not arquivos:
+
         st.warning("Selecione PDFs")
 
     else:
@@ -336,9 +421,11 @@ if st.button("Ler exames"):
             ) = ler_pdf(arquivo)
 
             if not data_exame:
+
                 st.warning(
                     f"Data não encontrada em {arquivo.name}"
                 )
+
                 continue
 
             data_vencimento = (
@@ -350,26 +437,38 @@ if st.button("Ler exames"):
             )
 
             supabase.table("exames").insert({
+
                 "hospital_id": user_id,
+
                 "cpf": cpf,
+
                 "paciente": nome,
+
                 "prontuario_registro": prontuario,
+
                 "exame": tipo_exame,
+
                 "data_exame": data_exame.strftime(
                     "%d/%m/%Y"
                 ),
+
                 "data_vencimento": data_vencimento.strftime(
                     "%d/%m/%Y"
                 ),
+
                 "status": status
+
             }).execute()
 
         st.success("Exames adicionados")
+
         st.rerun()
+
 
 # ================= TABELA =================
 
 st.subheader("Tabela de exames")
+
 
 if not df.empty:
 
@@ -390,24 +489,35 @@ if not df.empty:
             index=0
         )
 
-    st.caption(f"Filtro atual: {filtro}")
+    st.caption(
+        f"Filtro atual: {filtro}"
+    )
 
     if filtro == "🔴 Vencidos":
 
         df_tabela = df[
-            df["status"].str.contains("VENCIDO")
+            df["status"].str.contains(
+                "VENCIDO",
+                na=False
+            )
         ]
 
     elif filtro == "🟡 Em alerta":
 
         df_tabela = df[
-            df["status"].str.contains("ALERTA")
+            df["status"].str.contains(
+                "ALERTA",
+                na=False
+            )
         ]
 
     elif filtro == "🟢 Válidos":
 
         df_tabela = df[
-            df["status"].str.contains("VALIDO")
+            df["status"].str.contains(
+                "VALIDO",
+                na=False
+            )
         ]
 
     else:
@@ -449,6 +559,7 @@ if not df.empty:
             ).execute()
 
         st.success("Alterações salvas")
+
         st.rerun()
 
 else:
