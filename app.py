@@ -24,44 +24,79 @@ if not st.session_state.user:
 
     st.subheader("Login")
 
-    email = st.text_input("Email")
-    senha = st.text_input("Senha", type="password")
+    # FORMULÁRIO DE LOGIN
+    # Permite usar ENTER para efetuar o login
+    with st.form("form_login"):
 
-    col1, col2 = st.columns(2)
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
 
-    with col1:
-        if st.button("Entrar"):
+        entrar = st.form_submit_button("Entrar")
+
+    if entrar:
+
+        if not email or not senha:
+
+            st.warning("Digite o email e a senha para efetuar o login.")
+
+        else:
+
             try:
+
                 user = supabase.auth.sign_in_with_password({
                     "email": email,
                     "password": senha
                 })
+
                 st.session_state.user = user
                 st.rerun()
+
             except Exception as e:
+
                 st.error(f"Erro no login: {e}")
 
-    with col2:
-        if st.button("Cadastrar"):
+    # CADASTRO CONTINUA SEPARADO
+    if st.button("Cadastrar"):
+
+        if not email or not senha:
+
+            st.warning(
+                "Digite o email e a senha para realizar o cadastro."
+            )
+
+        else:
+
             try:
+
                 supabase.auth.sign_up({
                     "email": email,
                     "password": senha
                 })
-                st.success("Usuário criado! Agora clique em entrar.")
+
+                st.success(
+                    "Cadastro realizado! "
+                    "Enviamos um email de confirmação para o endereço informado. "
+                    "Para efetuar o login, é necessário confirmar o email. "
+                    "Verifique também a caixa de spam."
+                )
+
             except Exception as e:
+
                 st.error(f"Erro ao cadastrar: {e}")
 
     st.stop()
 
+
 # SESSÃO SUPABASE
 if st.session_state.user:
+
     supabase.auth.set_session(
         st.session_state.user.session.access_token,
         st.session_state.user.session.refresh_token
     )
 
 user_id = st.session_state.user.user.id
+
 
 # ================= FUNÇÕES =================
 
@@ -80,8 +115,11 @@ def identificar_exame(texto):
     ]
 
     for linha in linhas:
+
         linha_limpa = linha.strip()
+
         for palavra in palavras_chave:
+
             if palavra in linha_limpa.upper():
                 return linha_limpa.upper()
 
@@ -103,11 +141,14 @@ def identificar_exame(texto):
 
 
 def limpar_nome(nome):
+
     nome = nome.split("\n")[0]
+
     nome = re.split(
         r'Origem|Sexo|Idade|Nascimento|Dt\.|Convênio',
         nome
     )[0]
+
     return nome.strip()
 
 
@@ -116,8 +157,11 @@ def ler_pdf(arquivo):
     texto = ""
 
     with pdfplumber.open(arquivo) as pdf:
+
         for page in pdf.pages:
+
             conteudo = page.extract_text()
+
             if conteudo:
                 texto += conteudo + "\n"
 
@@ -140,12 +184,18 @@ def ler_pdf(arquivo):
     ]
 
     for padrao in padroes_nome:
-        match = re.search(padrao, texto)
+
+        match = re.search(
+            padrao,
+            texto
+        )
 
         if match:
+
             nome = limpar_nome(
                 match.group(1).strip()
             )
+
             break
 
     data_exame = None
@@ -166,10 +216,12 @@ def ler_pdf(arquivo):
         )
 
         if match:
+
             data_exame = datetime.strptime(
                 match.group(1),
                 "%d/%m/%Y"
             )
+
             break
 
     if not data_exame:
@@ -262,6 +314,7 @@ res = supabase.table("exames").select("*").eq(
 
 df = pd.DataFrame(res.data)
 
+
 # ================= ATUALIZAÇÃO AUTOMÁTICA DOS STATUS =================
 
 if not df.empty:
@@ -295,29 +348,36 @@ if not df.empty:
         except Exception:
             pass
 
+
 # ================= DASHBOARD =================
 
 if not df.empty:
 
     vencidos = len(
-        df[df["status"].str.contains(
-            "VENCIDO",
-            na=False
-        )]
+        df[
+            df["status"].str.contains(
+                "VENCIDO",
+                na=False
+            )
+        ]
     )
 
     alerta = len(
-        df[df["status"].str.contains(
-            "ALERTA",
-            na=False
-        )]
+        df[
+            df["status"].str.contains(
+                "ALERTA",
+                na=False
+            )
+        ]
     )
 
     validos = len(
-        df[df["status"].str.contains(
-            "VALIDO",
-            na=False
-        )]
+        df[
+            df["status"].str.contains(
+                "VALIDO",
+                na=False
+            )
+        ]
     )
 
 else:
@@ -332,6 +392,7 @@ c1, c2, c3 = st.columns(3)
 c1.metric("🔴 VENCIDOS", vencidos)
 c2.metric("🟡 EM ALERTA", alerta)
 c3.metric("🟢 VÁLIDOS", validos)
+
 
 # ================= ATUALIZAR STATUS =================
 
@@ -392,6 +453,7 @@ if st.session_state.ultima_atualizacao:
 
 
 st.divider()
+
 
 # ================= UPLOAD =================
 
@@ -493,6 +555,7 @@ if not df.empty:
         f"Filtro atual: {filtro}"
     )
 
+
     if filtro == "🔴 Vencidos":
 
         df_tabela = df[
@@ -524,6 +587,7 @@ if not df.empty:
 
         df_tabela = df
 
+
     colunas = [
         "cpf",
         "paciente",
@@ -535,10 +599,12 @@ if not df.empty:
         "Excluir"
     ]
 
+
     tabela = st.data_editor(
         df_tabela[colunas],
         use_container_width=True
     )
+
 
     if st.button("Salvar alterações"):
 
@@ -561,6 +627,7 @@ if not df.empty:
         st.success("Alterações salvas")
 
         st.rerun()
+
 
 else:
 
