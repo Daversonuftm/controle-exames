@@ -13,6 +13,86 @@ supabase = create_client(url, key)
 
 st.set_page_config(page_title="Controle de Exames", layout="wide")
 
+
+# ================= FUNÇÕES DE STATUS =================
+
+def calcular_status(data_vencimento):
+
+    hoje = datetime.now(
+        ZoneInfo("America/Sao_Paulo")
+    ).date()
+
+    if isinstance(data_vencimento, datetime):
+
+        data_vencimento = data_vencimento.date()
+
+    dias_para_vencer = (
+        data_vencimento - hoje
+    ).days
+
+    if dias_para_vencer < 0:
+
+        return "🔴 VENCIDO"
+
+    if dias_para_vencer <= 30:
+
+        return "🟡 EM ALERTA"
+
+    return "🟢 VALIDO"
+
+
+def atualizar_status_exames(user_id):
+
+    """
+    Atualiza os status de todos os exames do usuário.
+    Esta é a mesma função utilizada pelo botão manual
+    e pela atualização automática.
+    """
+
+    exames_atualizados = supabase.table(
+        "exames"
+    ).select(
+        "id, data_vencimento, status"
+    ).eq(
+        "hospital_id",
+        user_id
+    ).execute()
+
+    alterou = False
+
+    for exame in exames_atualizados.data:
+
+        try:
+
+            data_vencimento = datetime.strptime(
+                exame["data_vencimento"],
+                "%d/%m/%Y"
+            )
+
+            novo_status = calcular_status(
+                data_vencimento
+            )
+
+            status_atual = exame.get("status")
+
+            if status_atual != novo_status:
+
+                supabase.table("exames").update({
+                    "status": novo_status
+                }).eq(
+                    "id",
+                    exame["id"]
+                ).execute()
+
+                alterou = True
+
+        except Exception:
+
+            pass
+
+    return alterou
+
+
 # ================= LOGIN =================
 
 if "user" not in st.session_state:
@@ -24,7 +104,12 @@ if "exclusoes_pendentes" not in st.session_state:
 if "confirmar_saida" not in st.session_state:
     st.session_state.confirmar_saida = False
 
+if "ultima_atualizacao" not in st.session_state:
+    st.session_state.ultima_atualizacao = None
+
+
 st.title("Sistema de Controle de Exames")
+
 
 if not st.session_state.user:
 
@@ -49,6 +134,7 @@ if not st.session_state.user:
         with col2:
             cadastrar = st.form_submit_button("Cadastrar")
 
+
     # ================= ENTRAR =================
 
     if entrar:
@@ -68,9 +154,18 @@ if not st.session_state.user:
                     "password": senha
                 })
 
+                # ================= ATUALIZA STATUS AO LOGAR =================
+
+                user_id_login = user.user.id
+
+                atualizar_status_exames(
+                    user_id_login
+                )
+
                 st.session_state.user = user
                 st.session_state.exclusoes_pendentes = set()
                 st.session_state.confirmar_saida = False
+                st.session_state.ultima_atualizacao = None
 
                 st.rerun()
 
@@ -79,6 +174,7 @@ if not st.session_state.user:
                 st.error(
                     f"Erro no login: {e}"
                 )
+
 
     # ================= CADASTRAR =================
 
@@ -315,31 +411,6 @@ def ler_pdf(arquivo):
     )
 
 
-def calcular_status(data_vencimento):
-
-    hoje = datetime.now(
-        ZoneInfo("America/Sao_Paulo")
-    ).date()
-
-    if isinstance(data_vencimento, datetime):
-
-        data_vencimento = data_vencimento.date()
-
-    dias_para_vencer = (
-        data_vencimento - hoje
-    ).days
-
-    if dias_para_vencer < 0:
-
-        return "🔴 VENCIDO"
-
-    if dias_para_vencer <= 30:
-
-        return "🟡 EM ALERTA"
-
-    return "🟢 VALIDO"
-
-
 # ================= BANCO =================
 
 res = supabase.table("exames").select("*").eq(
@@ -350,7 +421,7 @@ res = supabase.table("exames").select("*").eq(
 df = pd.DataFrame(res.data)
 
 
-# ================= ATUALIZAÇÃO AUTOMÁTICA DOS STATUS =================
+# ================= ATUALIZAÇÃO AUTOMÁTICA INICIAL =================
 
 if not df.empty:
 
@@ -441,6 +512,39 @@ c3.metric(
 )
 
 
+# ================= ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA =================
+
+@st.fragment(run_every="1h")
+def verificacao_automatica_status():
+
+    if st.session_state.exclusoes_pendentes:
+
+        st.warning(
+            "⚠️ Existem alterações não salvas. "
+            "Salve ou desmarque as alterações antes da "
+            "atualização automática dos status."
+        )
+
+        return
+
+    try:
+
+        houve_alteracao = atualizar_status_exames(
+            user_id
+        )
+
+        if houve_alteracao:
+
+            st.rerun(scope="app")
+
+    except Exception:
+
+        pass
+
+
+verificacao_automatica_status()
+
+
 # ================= ATUALIZAR STATUS + SAIR =================
 
 col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
@@ -452,32 +556,9 @@ with col_atualizar:
 
         try:
 
-            exames_atualizados = supabase.table(
-                "exames"
-            ).select(
-                "id, data_vencimento"
-            ).eq(
-                "hospital_id",
+            atualizar_status_exames(
                 user_id
-            ).execute()
-
-            for exame in exames_atualizados.data:
-
-                data_vencimento = datetime.strptime(
-                    exame["data_vencimento"],
-                    "%d/%m/%Y"
-                )
-
-                novo_status = calcular_status(
-                    data_vencimento
-                )
-
-                supabase.table("exames").update({
-                    "status": novo_status
-                }).eq(
-                    "id",
-                    exame["id"]
-                ).execute()
+            )
 
             st.session_state.ultima_atualizacao = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
@@ -490,11 +571,6 @@ with col_atualizar:
             st.error(
                 f"Erro ao atualizar os status: {e}"
             )
-
-
-if "ultima_atualizacao" not in st.session_state:
-
-    st.session_state.ultima_atualizacao = None
 
 
 if st.session_state.ultima_atualizacao:
