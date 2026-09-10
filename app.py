@@ -24,20 +24,34 @@ if not st.session_state.user:
 
     st.subheader("Login")
 
-    # FORMULÁRIO DE LOGIN
-    # Permite usar ENTER para efetuar o login
+    # ================= FORMULÁRIO LOGIN/CADASTRO =================
+
     with st.form("form_login"):
 
         email = st.text_input("Email")
-        senha = st.text_input("Senha", type="password")
 
-        entrar = st.form_submit_button("Entrar")
+        senha = st.text_input(
+            "Senha",
+            type="password"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            entrar = st.form_submit_button("Entrar")
+
+        with col2:
+            cadastrar = st.form_submit_button("Cadastrar")
+
+    # ================= ENTRAR =================
 
     if entrar:
 
         if not email or not senha:
 
-            st.warning("Digite o email e a senha para efetuar o login.")
+            st.warning(
+                "Digite o email e a senha para efetuar o login."
+            )
 
         else:
 
@@ -49,14 +63,18 @@ if not st.session_state.user:
                 })
 
                 st.session_state.user = user
+
                 st.rerun()
 
             except Exception as e:
 
-                st.error(f"Erro no login: {e}")
+                st.error(
+                    f"Erro no login: {e}"
+                )
 
-    # CADASTRO CONTINUA SEPARADO
-    if st.button("Cadastrar"):
+    # ================= CADASTRAR =================
+
+    if cadastrar:
 
         if not email or not senha:
 
@@ -82,12 +100,15 @@ if not st.session_state.user:
 
             except Exception as e:
 
-                st.error(f"Erro ao cadastrar: {e}")
+                st.error(
+                    f"Erro ao cadastrar: {e}"
+                )
 
     st.stop()
 
 
-# SESSÃO SUPABASE
+# ================= SESSÃO SUPABASE =================
+
 if st.session_state.user:
 
     supabase.auth.set_session(
@@ -121,6 +142,7 @@ def identificar_exame(texto):
         for palavra in palavras_chave:
 
             if palavra in linha_limpa.upper():
+
                 return linha_limpa.upper()
 
     texto = texto.lower()
@@ -173,6 +195,7 @@ def ler_pdf(arquivo):
     )
 
     if cpf_match:
+
         cpf = cpf_match.group(1)
 
     nome = None
@@ -272,6 +295,7 @@ def ler_pdf(arquivo):
         )
 
         if match_registro:
+
             prontuario_registro = match_registro.group(1)
 
     return (
@@ -290,6 +314,7 @@ def calcular_status(data_vencimento):
     ).date()
 
     if isinstance(data_vencimento, datetime):
+
         data_vencimento = data_vencimento.date()
 
     dias_para_vencer = (
@@ -297,9 +322,11 @@ def calcular_status(data_vencimento):
     ).days
 
     if dias_para_vencer < 0:
+
         return "🔴 VENCIDO"
 
     if dias_para_vencer <= 30:
+
         return "🟡 EM ALERTA"
 
     return "🟢 VALIDO"
@@ -346,6 +373,7 @@ if not df.empty:
                 df.loc[index, "status"] = novo_status
 
         except Exception:
+
             pass
 
 
@@ -389,14 +417,26 @@ else:
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("🔴 VENCIDOS", vencidos)
-c2.metric("🟡 EM ALERTA", alerta)
-c3.metric("🟢 VÁLIDOS", validos)
+c1.metric(
+    "🔴 VENCIDOS",
+    vencidos
+)
+
+c2.metric(
+    "🟡 EM ALERTA",
+    alerta
+)
+
+c3.metric(
+    "🟢 VÁLIDOS",
+    validos
+)
 
 
 # ================= ATUALIZAR STATUS =================
 
 if "ultima_atualizacao" not in st.session_state:
+
     st.session_state.ultima_atualizacao = None
 
 
@@ -522,14 +562,18 @@ if st.button("Ler exames"):
 
             }).execute()
 
-        st.success("Exames adicionados")
+        st.success(
+            "Exames adicionados"
+        )
 
         st.rerun()
 
 
 # ================= TABELA =================
 
-st.subheader("Tabela de exames")
+st.subheader(
+    "Tabela de exames"
+)
 
 
 if not df.empty:
@@ -606,7 +650,9 @@ if not df.empty:
     )
 
 
-    if st.button("Salvar alterações"):
+    if st.button(
+        "Salvar alterações"
+    ):
 
         excluir_index = tabela[
             tabela["Excluir"] == True
@@ -619,16 +665,22 @@ if not df.empty:
                 "id"
             ]
 
-            supabase.table("exames").delete().eq(
+            supabase.table(
+                "exames"
+            ).delete().eq(
                 "id",
                 id_excluir
             ).execute()
 
-        st.success("Alterações salvas")
+        st.success(
+            "Alterações salvas"
+        )
 
         st.rerun()
 
 
 else:
 
-    st.info("Nenhum exame cadastrado")
+    st.info(
+        "Nenhum exame cadastrado"
+    )
