@@ -441,55 +441,60 @@ c3.metric(
 )
 
 
-# ================= ATUALIZAR STATUS =================
+# ================= ATUALIZAR STATUS + SAIR =================
+
+col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
+
+
+with col_atualizar:
+
+    if st.button("Atualizar status"):
+
+        try:
+
+            exames_atualizados = supabase.table(
+                "exames"
+            ).select(
+                "id, data_vencimento"
+            ).eq(
+                "hospital_id",
+                user_id
+            ).execute()
+
+            for exame in exames_atualizados.data:
+
+                data_vencimento = datetime.strptime(
+                    exame["data_vencimento"],
+                    "%d/%m/%Y"
+                )
+
+                novo_status = calcular_status(
+                    data_vencimento
+                )
+
+                supabase.table("exames").update({
+                    "status": novo_status
+                }).eq(
+                    "id",
+                    exame["id"]
+                ).execute()
+
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            )
+
+            st.rerun()
+
+        except Exception as e:
+
+            st.error(
+                f"Erro ao atualizar os status: {e}"
+            )
+
 
 if "ultima_atualizacao" not in st.session_state:
 
     st.session_state.ultima_atualizacao = None
-
-
-if st.button(" Atualizar status"):
-
-    try:
-
-        exames_atualizados = supabase.table(
-            "exames"
-        ).select(
-            "id, data_vencimento"
-        ).eq(
-            "hospital_id",
-            user_id
-        ).execute()
-
-        for exame in exames_atualizados.data:
-
-            data_vencimento = datetime.strptime(
-                exame["data_vencimento"],
-                "%d/%m/%Y"
-            )
-
-            novo_status = calcular_status(
-                data_vencimento
-            )
-
-            supabase.table("exames").update({
-                "status": novo_status
-            }).eq(
-                "id",
-                exame["id"]
-            ).execute()
-
-        st.session_state.ultima_atualizacao = datetime.now(
-            ZoneInfo("America/Sao_Paulo")
-        )
-
-        st.rerun()
-
-    except Exception as e:
-
-        st.error(
-            f"Erro ao atualizar os status: {e}"
-        )
 
 
 if st.session_state.ultima_atualizacao:
@@ -499,13 +504,6 @@ if st.session_state.ultima_atualizacao:
         f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')}"
     )
 
-
-st.divider()
-
-
-# ================= BOTÃO SAIR =================
-
-col_vazia, col_sair = st.columns([5, 1])
 
 with col_sair:
 
