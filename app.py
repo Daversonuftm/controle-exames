@@ -24,9 +24,6 @@ if "exclusoes_pendentes" not in st.session_state:
 if "confirmar_saida" not in st.session_state:
     st.session_state.confirmar_saida = False
 
-if "ultima_atualizacao" not in st.session_state:
-    st.session_state.ultima_atualizacao = None
-
 st.title("Sistema de Controle de Exames")
 
 if not st.session_state.user:
@@ -343,20 +340,21 @@ def calcular_status(data_vencimento):
     return "🟢 VALIDO"
 
 
-# ================= FUNÇÃO ÚNICA DE ATUALIZAÇÃO =================
+# ================= BANCO =================
 
-def atualizar_status_banco():
+res = supabase.table("exames").select("*").eq(
+    "hospital_id",
+    user_id
+).execute()
 
-    exames_atualizados = supabase.table(
-        "exames"
-    ).select(
-        "id, data_vencimento"
-    ).eq(
-        "hospital_id",
-        user_id
-    ).execute()
+df = pd.DataFrame(res.data)
 
-    for exame in exames_atualizados.data:
+
+# ================= ATUALIZAÇÃO AUTOMÁTICA DOS STATUS =================
+
+if not df.empty:
+
+    for index, exame in df.iterrows():
 
         try:
 
@@ -369,71 +367,22 @@ def atualizar_status_banco():
                 data_vencimento
             )
 
-            supabase.table("exames").update({
-                "status": novo_status
-            }).eq(
-                "id",
-                exame["id"]
-            ).execute()
+            status_atual = exame.get("status")
+
+            if status_atual != novo_status:
+
+                supabase.table("exames").update({
+                    "status": novo_status
+                }).eq(
+                    "id",
+                    exame["id"]
+                ).execute()
+
+                df.loc[index, "status"] = novo_status
 
         except Exception:
 
             pass
-
-
-# ================= ATUALIZAÇÃO AO ENTRAR =================
-#
-# Quando o usuário faz login, o st.rerun() acima faz o código
-# chegar novamente aqui. A função abaixo executa a mesma
-# atualização feita pelo botão "Atualizar status".
-
-if not st.session_state.exclusoes_pendentes:
-
-    atualizar_status_banco()
-
-
-# ================= BANCO =================
-
-res = supabase.table("exames").select("*").eq(
-    "hospital_id",
-    user_id
-).execute()
-
-df = pd.DataFrame(res.data)
-
-
-# ================= ATUALIZAÇÃO AUTOMÁTICA DE 1 EM 1 HORA =================
-
-@st.fragment(run_every="1h")
-def atualizacao_automatica():
-
-    # Se o usuário estiver fazendo alterações na tabela,
-    # a atualização automática fica pausada para não interferir.
-
-    if st.session_state.exclusoes_pendentes:
-
-        st.warning(
-            "⚠️ Há alterações não salvas na tabela. "
-            "A atualização automática dos status foi pausada "
-            "para não interferir nas suas alterações. "
-            "Salve ou desmarque as alterações para continuar."
-        )
-
-        return
-
-    try:
-
-        atualizar_status_banco()
-
-        # Recarrega a página para mostrar os novos status.
-        st.rerun()
-
-    except Exception:
-
-        pass
-
-
-atualizacao_automatica()
 
 
 # ================= DASHBOARD =================
@@ -501,31 +450,51 @@ with col_atualizar:
 
     if st.button("Atualizar status"):
 
-        if st.session_state.exclusoes_pendentes:
+        try:
 
-            st.warning(
-                "Há alterações não salvas. "
-                "Salve ou desmarque as alterações antes "
-                "de atualizar os status."
+            exames_atualizados = supabase.table(
+                "exames"
+            ).select(
+                "id, data_vencimento"
+            ).eq(
+                "hospital_id",
+                user_id
+            ).execute()
+
+            for exame in exames_atualizados.data:
+
+                data_vencimento = datetime.strptime(
+                    exame["data_vencimento"],
+                    "%d/%m/%Y"
+                )
+
+                novo_status = calcular_status(
+                    data_vencimento
+                )
+
+                supabase.table("exames").update({
+                    "status": novo_status
+                }).eq(
+                    "id",
+                    exame["id"]
+                ).execute()
+
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
             )
 
-        else:
+            st.rerun()
 
-            try:
+        except Exception as e:
 
-                atualizar_status_banco()
+            st.error(
+                f"Erro ao atualizar os status: {e}"
+            )
 
-                st.session_state.ultima_atualizacao = datetime.now(
-                    ZoneInfo("America/Sao_Paulo")
-                )
 
-                st.rerun()
+if "ultima_atualizacao" not in st.session_state:
 
-            except Exception as e:
-
-                st.error(
-                    f"Erro ao atualizar os status: {e}"
-                )
+    st.session_state.ultima_atualizacao = None
 
 
 if st.session_state.ultima_atualizacao:
@@ -735,13 +704,8 @@ if not df.empty:
 
     df_tabela = df_tabela.copy()
 
-    # Mostra como marcado aquilo que já foi selecionado
-    # para exclusão nesta sessão.
-
-    ids_excluidos = st.session_state.exclusoes_pendentes
-
-    df_tabela["Excluir"] = df_tabela["id"].isin(
-        ids_excluidos
+    df_tabela["Excluir"] = df_tabela.index.isin(
+        st.session_state.exclusoes_pendentes
     )
 
 
