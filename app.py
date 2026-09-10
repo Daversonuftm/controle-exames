@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
-import extra_streamlit_components as stx
-
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from supabase import create_client
 
+# ============================================================
+# SUPABASE
+# ============================================================
 
-# 🔑 SUPABASE
 url = "https://dpouzkapdaipnfnlsrio.supabase.co"
 key = "sb_publishable_hhN-A_o0Q9Y6o8lTGr2xCw_iBbSSXca"
 
@@ -20,253 +20,94 @@ st.set_page_config(
     layout="wide"
 )
 
-
-# ================= COOKIE MANAGER =================
-
-cookie_manager = stx.CookieManager(
-    key="controle_exames_cookies"
-)
-
-
-# ================= SESSION STATE =================
+# ============================================================
+# LOGIN
+# ============================================================
 
 if "user" not in st.session_state:
     st.session_state.user = None
 
-if "exclusoes_pendentes" not in st.session_state:
-    st.session_state.exclusoes_pendentes = set()
-
-if "confirmar_saida" not in st.session_state:
-    st.session_state.confirmar_saida = False
-
-if "aviso_recarregamento" not in st.session_state:
-    st.session_state.aviso_recarregamento = False
-
-if "ultima_atualizacao" not in st.session_state:
-    st.session_state.ultima_atualizacao = None
-
-if "status_verificado" not in st.session_state:
-    st.session_state.status_verificado = False
-
-
-# ================= RESTAURAR LOGIN APÓS F5 =================
-
-if st.session_state.user is None:
-
-    access_token = cookie_manager.get(
-        "controle_exames_access"
-    )
-
-    refresh_token = cookie_manager.get(
-        "controle_exames_refresh"
-    )
-
-    pendencia_recarregamento = cookie_manager.get(
-        "controle_exames_pendente"
-    )
-
-    if access_token and refresh_token:
-
-        try:
-
-            supabase.auth.set_session(
-                access_token,
-                refresh_token
-            )
-
-            sessao = supabase.auth.get_session()
-
-            usuario = supabase.auth.get_user()
-
-            if sessao.session and usuario.user:
-
-                st.session_state.user = {
-                    "session": sessao.session,
-                    "user": usuario.user
-                }
-
-                # Salva os tokens atualizados caso o Supabase
-                # tenha renovado a sessão
-                cookie_manager.set(
-                    "controle_exames_access",
-                    sessao.session.access_token,
-                    max_age=60 * 60 * 24 * 30,
-                    secure=True,
-                    same_site="lax"
-                )
-
-                cookie_manager.set(
-                    "controle_exames_refresh",
-                    sessao.session.refresh_token,
-                    max_age=60 * 60 * 24 * 30,
-                    secure=True,
-                    same_site="lax"
-                )
-
-                if pendencia_recarregamento == "1":
-
-                    st.session_state.aviso_recarregamento = True
-
-                    cookie_manager.delete(
-                        "controle_exames_pendente"
-                    )
-
-        except Exception:
-
-            st.session_state.user = None
-
-
-# ================= TÍTULO =================
-
-st.title(
-    "Sistema de Controle de Exames"
-)
-
-
-# ================= LOGIN =================
+st.title("Sistema de Controle de Exames")
 
 if not st.session_state.user:
 
     st.subheader("Login")
 
-    with st.form("form_login"):
+    with st.form("login_form"):
 
-        email = st.text_input(
-            "Email"
-        )
-
-        senha = st.text_input(
-            "Senha",
-            type="password"
-        )
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
 
         col1, col2 = st.columns(2)
 
         with col1:
-
             entrar = st.form_submit_button(
-                "Entrar"
+                "Entrar",
+                use_container_width=True
             )
 
         with col2:
-
             cadastrar = st.form_submit_button(
-                "Cadastrar"
+                "Cadastrar",
+                use_container_width=True
             )
 
-
-    # ================= ENTRAR =================
+    # --------------------------------------------------------
+    # ENTRAR
+    # --------------------------------------------------------
 
     if entrar:
 
         if not email or not senha:
-
-            st.warning(
-                "Digite o email e a senha para efetuar o login."
-            )
+            st.warning("Preencha o email e a senha.")
 
         else:
 
             try:
 
-                resposta = supabase.auth.sign_in_with_password({
-
+                user = supabase.auth.sign_in_with_password({
                     "email": email,
-
                     "password": senha
-
                 })
 
-                sessao = resposta.session
+                st.session_state.user = user
 
-                usuario = resposta.user
-
-                if sessao and usuario:
-
-                    st.session_state.user = {
-
-                        "session": sessao,
-
-                        "user": usuario
-
-                    }
-
-                    # Guarda a sessão no navegador
-                    cookie_manager.set(
-                        "controle_exames_access",
-                        sessao.access_token,
-                        max_age=60 * 60 * 24 * 30,
-                        secure=True,
-                        same_site="lax"
-                    )
-
-                    cookie_manager.set(
-                        "controle_exames_refresh",
-                        sessao.refresh_token,
-                        max_age=60 * 60 * 24 * 30,
-                        secure=True,
-                        same_site="lax"
-                    )
-
-                    st.session_state.exclusoes_pendentes = set()
-
-                    st.session_state.confirmar_saida = False
-
-                    st.rerun()
+                st.rerun()
 
             except Exception as e:
 
-                mensagem_erro = str(e)
+                st.error(
+                    "Não foi possível realizar o login. "
+                    "Verifique o email e a senha."
+                )
 
-                if (
-                    "Email not confirmed" in mensagem_erro
-                    or
-                    "email not confirmed" in mensagem_erro.lower()
-                    or
-                    "not confirmed" in mensagem_erro.lower()
-                ):
-
-                    st.error(
-                        "Para efetuar o login, é necessário confirmar o email. "
-                        "Verifique sua caixa de entrada e, se necessário, "
-                        "a caixa de spam."
-                    )
-
-                else:
-
-                    st.error(
-                        f"Erro no login: {e}"
-                    )
-
-
-    # ================= CADASTRAR =================
+    # --------------------------------------------------------
+    # CADASTRAR
+    # --------------------------------------------------------
 
     if cadastrar:
 
         if not email or not senha:
 
             st.warning(
-                "Digite o email e a senha para realizar o cadastro."
+                "Preencha o email e a senha para realizar o cadastro."
             )
 
         else:
 
             try:
 
-                supabase.auth.sign_up({
-
+                resultado = supabase.auth.sign_up({
                     "email": email,
-
                     "password": senha
-
                 })
 
-                st.success(
-                    "Cadastro realizado! "
-                    "Enviamos um email de confirmação para o endereço informado. "
-                    "Para efetuar o login, é necessário confirmar o email. "
-                    "Verifique também a caixa de spam."
-                )
+                if resultado.user:
+
+                    st.success(
+                        "Usuário criado com sucesso! "
+                        "Para efetuar o login, é necessário confirmar o email."
+                    )
 
             except Exception as e:
 
@@ -277,74 +118,56 @@ if not st.session_state.user:
     st.stop()
 
 
-# ================= SESSÃO SUPABASE =================
+# ============================================================
+# SESSÃO SUPABASE
+# ============================================================
 
-try:
+if st.session_state.user:
 
-    supabase.auth.set_session(
+    try:
 
-        st.session_state.user["session"].access_token,
+        supabase.auth.set_session(
+            st.session_state.user.session.access_token,
+            st.session_state.user.session.refresh_token
+        )
 
-        st.session_state.user["session"].refresh_token
+    except Exception as e:
 
-    )
+        st.error(
+            "A sessão expirou. Faça o login novamente."
+        )
 
-except Exception:
-
-    st.session_state.user = None
-
-    cookie_manager.delete(
-        "controle_exames_access"
-    )
-
-    cookie_manager.delete(
-        "controle_exames_refresh"
-    )
-
-    st.rerun()
+        st.session_state.user = None
+        st.stop()
 
 
-user_id = st.session_state.user["user"].id
+user_id = st.session_state.user.user.id
 
 
-# ================= FUNÇÕES =================
+# ============================================================
+# FUNÇÕES
+# ============================================================
 
 def identificar_exame(texto):
 
     if texto.lower().count("resultado") > 5:
-
         return "LAUDO PRÉ TRANSPLANTE"
-
 
     linhas = texto.split("\n")
 
-
     palavras_chave = [
-
         "ELETROCARDIOGRAMA",
-
         "ULTRASSONOGRAFIA",
-
         "ENDOSCOPIA",
-
         "ECOCARDIOGRAMA",
-
         "TESTE ERGOMÉTRICO",
-
         "TESTE ERGOMETRICO",
-
         "DOPPLER",
-
         "HEMODINÂMICO",
-
         "HEMODINAMICO",
-
         "CORONARIOGRAFIA",
-
         "CATETERISMO"
-
     ]
-
 
     for linha in linhas:
 
@@ -356,41 +179,19 @@ def identificar_exame(texto):
 
                 return linha_limpa.upper()
 
-
     texto = texto.lower()
 
-
     if "endoscopia" in texto or "eda" in texto:
-
         return "ENDOSCOPIA"
 
-
-    if (
-        "ecocardiograma" in texto
-        or
-        "ecocardiografia" in texto
-    ):
-
+    if "ecocardiograma" in texto or "ecocardiografia" in texto:
         return "ECOCARDIOGRAMA"
 
-
-    if (
-        "ultrassom" in texto
-        or
-        "ultrassonografia" in texto
-    ):
-
+    if "ultrassom" in texto or "ultrassonografia" in texto:
         return "ULTRASSOM"
 
-
-    if (
-        "pré tx" in texto
-        or
-        "pre tx" in texto
-    ):
-
+    if "pré tx" in texto or "pre tx" in texto:
         return "LAUDO PRÉ TRANSPLANTE"
-
 
     return "EXAME"
 
@@ -411,7 +212,6 @@ def ler_pdf(arquivo):
 
     texto = ""
 
-
     with pdfplumber.open(arquivo) as pdf:
 
         for page in pdf.pages:
@@ -419,37 +219,25 @@ def ler_pdf(arquivo):
             conteudo = page.extract_text()
 
             if conteudo:
-
                 texto += conteudo + "\n"
 
-
     cpf = None
-
 
     cpf_match = re.search(
         r'CPF[:\s]*([0-9\.\-]{11,14})',
         texto
     )
 
-
     if cpf_match:
-
         cpf = cpf_match.group(1)
-
 
     nome = None
 
-
     padroes_nome = [
-
         r'Nome Civil:\s*(.*)',
-
         r'Nome\s*\.{0,}\s*:\s*(.*)',
-
         r'Paciente:\s*(.*)'
-
     ]
-
 
     for padrao in padroes_nome:
 
@@ -466,9 +254,7 @@ def ler_pdf(arquivo):
 
             break
 
-
     data_exame = None
-
 
     padroes_data = [
 
@@ -479,9 +265,7 @@ def ler_pdf(arquivo):
         r'Realização[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
 
         r'Emissão do laudo[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
-
     ]
-
 
     for padrao in padroes_data:
 
@@ -500,21 +284,17 @@ def ler_pdf(arquivo):
 
             break
 
-
     if not data_exame:
 
         for linha in texto.split("\n"):
 
             if "nasc" in linha.lower():
-
                 continue
-
 
             match = re.search(
                 r'\d{2}/\d{2}/\d{4}',
                 linha
             )
-
 
             if match:
 
@@ -525,21 +305,15 @@ def ler_pdf(arquivo):
 
                 break
 
-
-    tipo_exame = identificar_exame(
-        texto
-    )
-
+    tipo_exame = identificar_exame(texto)
 
     prontuario_registro = None
-
 
     match_prontuario = re.search(
         r'Prontu[aá]rio[:\s]*([0-9/]+)',
         texto,
         re.IGNORECASE
     )
-
 
     if match_prontuario:
 
@@ -549,7 +323,6 @@ def ler_pdf(arquivo):
             match_prontuario.group(1)
         )
 
-
     if not prontuario_registro:
 
         match_registro = re.search(
@@ -558,24 +331,16 @@ def ler_pdf(arquivo):
             re.IGNORECASE
         )
 
-
         if match_registro:
 
             prontuario_registro = match_registro.group(1)
 
-
     return (
-
         cpf,
-
         nome,
-
         data_exame,
-
         tipo_exame,
-
         prontuario_registro
-
     )
 
 
@@ -585,49 +350,37 @@ def calcular_status(data_vencimento):
         ZoneInfo("America/Sao_Paulo")
     ).date()
 
+    vencimento = data_vencimento.date()
 
-    if isinstance(
-        data_vencimento,
-        datetime
-    ):
-
-        data_vencimento = data_vencimento.date()
-
-
-    dias_para_vencer = (
-        data_vencimento - hoje
+    dias_restantes = (
+        vencimento - hoje
     ).days
 
-
-    if dias_para_vencer < 0:
+    if dias_restantes < 0:
 
         return "🔴 VENCIDO"
 
-
-    if dias_para_vencer <= 30:
+    if dias_restantes <= 30:
 
         return "🟡 EM ALERTA"
-
 
     return "🟢 VALIDO"
 
 
-# ================= ATUALIZAR STATUS NO BANCO =================
+# ============================================================
+# ATUALIZAÇÃO DOS STATUS
+# ============================================================
 
 def atualizar_status_banco():
 
     exames = supabase.table(
         "exames"
     ).select(
-        "id, data_vencimento, status"
+        "id, data_vencimento"
     ).eq(
         "hospital_id",
         user_id
     ).execute()
-
-
-    houve_mudanca = False
-
 
     for exame in exames.data:
 
@@ -638,49 +391,46 @@ def atualizar_status_banco():
                 "%d/%m/%Y"
             )
 
-
             novo_status = calcular_status(
                 data_vencimento
             )
 
-
-            if exame.get("status") != novo_status:
-
-                supabase.table(
-                    "exames"
-                ).update({
-
-                    "status": novo_status
-
-                }).eq(
-                    "id",
-                    exame["id"]
-                ).execute()
-
-
-                houve_mudanca = True
-
+            supabase.table(
+                "exames"
+            ).update({
+                "status": novo_status
+            }).eq(
+                "id",
+                exame["id"]
+            ).execute()
 
         except Exception:
-
-            pass
-
-
-    return houve_mudanca
+            continue
 
 
-# ================= ATUALIZAÇÃO AO ENTRAR =================
+# ============================================================
+# CONTROLE DA PRIMEIRA ATUALIZAÇÃO
+# ============================================================
 
-if not st.session_state.status_verificado:
+if "status_atualizado_entrada" not in st.session_state:
 
-    if not st.session_state.exclusoes_pendentes:
-
-        atualizar_status_banco()
-
-    st.session_state.status_verificado = True
+    st.session_state.status_atualizado_entrada = False
 
 
-# ================= BANCO =================
+# ============================================================
+# ATUALIZAÇÃO AUTOMÁTICA AO ENTRAR
+# ============================================================
+
+if not st.session_state.status_atualizado_entrada:
+
+    atualizar_status_banco()
+
+    st.session_state.status_atualizado_entrada = True
+
+
+# ============================================================
+# BUSCAR EXAMES
+# ============================================================
 
 res = supabase.table(
     "exames"
@@ -691,56 +441,42 @@ res = supabase.table(
     user_id
 ).execute()
 
-
 df = pd.DataFrame(
     res.data
 )
 
 
-# ================= ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA =================
+# ============================================================
+# ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA
+# ============================================================
 
-@st.fragment(
-    run_every="1h"
-)
+if "ultima_atualizacao" not in st.session_state:
+
+    st.session_state.ultima_atualizacao = None
+
+
+@st.fragment(run_every="1h")
 def atualizacao_automatica():
 
-    # Não atualiza automaticamente enquanto
-    # existirem alterações não salvas
-    if st.session_state.exclusoes_pendentes:
+    # Se houver alguma seleção de exclusão na tela,
+    # não executa a atualização automática.
+
+    if (
+        "exclusoes_pendentes" in st.session_state
+        and st.session_state.exclusoes_pendentes
+    ):
 
         return
 
-
-    houve_mudanca = atualizar_status_banco()
-
-
-    if houve_mudanca:
-
-        st.rerun()
+    atualizar_status_banco()
 
 
 atualizacao_automatica()
 
 
-# ================= DASHBOARD =================
-
-if not df.empty:
-
-    # Recalcula o dataframe depois das atualizações
-    res_atualizado = supabase.table(
-        "exames"
-    ).select(
-        "*"
-    ).eq(
-        "hospital_id",
-        user_id
-    ).execute()
-
-
-    df = pd.DataFrame(
-        res_atualizado.data
-    )
-
+# ============================================================
+# DASHBOARD
+# ============================================================
 
 if not df.empty:
 
@@ -753,7 +489,6 @@ if not df.empty:
         ]
     )
 
-
     alerta = len(
         df[
             df["status"].str.contains(
@@ -762,7 +497,6 @@ if not df.empty:
             )
         ]
     )
-
 
     validos = len(
         df[
@@ -776,26 +510,21 @@ if not df.empty:
 else:
 
     vencidos = 0
-
     alerta = 0
-
     validos = 0
 
 
 c1, c2, c3 = st.columns(3)
-
 
 c1.metric(
     "🔴 VENCIDOS",
     vencidos
 )
 
-
 c2.metric(
     "🟡 EM ALERTA",
     alerta
 )
-
 
 c3.metric(
     "🟢 VÁLIDOS",
@@ -803,25 +532,32 @@ c3.metric(
 )
 
 
-# ================= ATUALIZAR STATUS + SAIR =================
+# ============================================================
+# ATUALIZAR STATUS + SAIR
+# ============================================================
 
 col_atualizar, col_espaco, col_sair = st.columns(
-    [1, 5, 1]
+    [2, 5, 1]
 )
-
 
 with col_atualizar:
 
     if st.button(
-        "Atualizar status"
+        "Atualizar status",
+        use_container_width=True
     ):
 
-        if st.session_state.exclusoes_pendentes:
+        # Se houver algo selecionado para excluir,
+        # não atualiza para evitar interferência.
+
+        if (
+            "exclusoes_pendentes" in st.session_state
+            and st.session_state.exclusoes_pendentes
+        ):
 
             st.warning(
-                "Existem alterações não salvas. "
-                "Salve ou desfaça essas alterações antes "
-                "de atualizar os status."
+                "Há exames selecionados para exclusão. "
+                "Salve ou desmarque as alterações antes de atualizar os status."
             )
 
         else:
@@ -843,144 +579,38 @@ with col_atualizar:
                 )
 
 
-if st.session_state.ultima_atualizacao:
-
-    st.caption(
-        f"Atualizado em: "
-        f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')}"
-    )
-
-
-# ================= SAIR =================
-
 with col_sair:
 
     if st.button(
-        "Sair"
+        "Sair",
+        use_container_width=True
     ):
 
-        if st.session_state.exclusoes_pendentes:
+        supabase.auth.sign_out()
 
-            st.session_state.confirmar_saida = True
+        st.session_state.user = None
 
-        else:
-
-            try:
-
-                supabase.auth.sign_out()
-
-            except Exception:
-
-                pass
-
-
-            cookie_manager.delete(
-                "controle_exames_access"
-            )
-
-            cookie_manager.delete(
-                "controle_exames_refresh"
-            )
-
-            cookie_manager.delete(
-                "controle_exames_pendente"
-            )
-
-
-            st.session_state.user = None
-
-            st.session_state.exclusoes_pendentes = set()
-
-            st.session_state.confirmar_saida = False
-
-            st.rerun()
-
-
-# ================= AVISO DE RECARREGAMENTO =================
-
-if st.session_state.aviso_recarregamento:
-
-    st.warning(
-        "⚠️ A página foi recarregada e havia alterações "
-        "que ainda não tinham sido salvas. "
-        "Essas alterações não foram salvas."
-    )
-
-
-    if st.button(
-        "Entendi"
-    ):
-
-        st.session_state.aviso_recarregamento = False
+        st.session_state.status_atualizado_entrada = False
 
         st.rerun()
 
 
-# ================= CONFIRMAÇÃO DE SAÍDA =================
+if st.session_state.ultima_atualizacao:
 
-if st.session_state.confirmar_saida:
-
-    st.warning(
-        "⚠️ Existem alterações não salvas. "
-        "Se você sair agora, essas alterações serão perdidas."
+    st.caption(
+        "Atualizado em: "
+        + st.session_state.ultima_atualizacao.strftime(
+            "%d/%m/%Y às %H:%M:%S"
+        )
     )
-
-
-    col_continuar, col_sair_confirmar = st.columns(2)
-
-
-    with col_continuar:
-
-        if st.button(
-            "Continuar editando"
-        ):
-
-            st.session_state.confirmar_saida = False
-
-            st.rerun()
-
-
-    with col_sair_confirmar:
-
-        if st.button(
-            "Sair sem salvar"
-        ):
-
-            try:
-
-                supabase.auth.sign_out()
-
-            except Exception:
-
-                pass
-
-
-            cookie_manager.delete(
-                "controle_exames_access"
-            )
-
-            cookie_manager.delete(
-                "controle_exames_refresh"
-            )
-
-            cookie_manager.delete(
-                "controle_exames_pendente"
-            )
-
-
-            st.session_state.user = None
-
-            st.session_state.exclusoes_pendentes = set()
-
-            st.session_state.confirmar_saida = False
-
-            st.rerun()
 
 
 st.divider()
 
 
-# ================= UPLOAD =================
+# ============================================================
+# UPLOAD
+# ============================================================
 
 arquivos = st.file_uploader(
     "Selecionar PDFs",
@@ -989,9 +619,7 @@ arquivos = st.file_uploader(
 )
 
 
-if st.button(
-    "Ler exames"
-):
+if st.button("Ler exames"):
 
     if not arquivos:
 
@@ -1009,10 +637,7 @@ if st.button(
                 data_exame,
                 tipo_exame,
                 prontuario
-            ) = ler_pdf(
-                arquivo
-            )
-
+            ) = ler_pdf(arquivo)
 
             if not data_exame:
 
@@ -1022,16 +647,14 @@ if st.button(
 
                 continue
 
-
             data_vencimento = (
-                data_exame + timedelta(days=180)
+                data_exame
+                + timedelta(days=180)
             )
-
 
             status = calcular_status(
                 data_vencimento
             )
-
 
             supabase.table(
                 "exames"
@@ -1047,18 +670,19 @@ if st.button(
 
                 "exame": tipo_exame,
 
-                "data_exame": data_exame.strftime(
-                    "%d/%m/%Y"
-                ),
+                "data_exame":
+                    data_exame.strftime(
+                        "%d/%m/%Y"
+                    ),
 
-                "data_vencimento": data_vencimento.strftime(
-                    "%d/%m/%Y"
-                ),
+                "data_vencimento":
+                    data_vencimento.strftime(
+                        "%d/%m/%Y"
+                    ),
 
                 "status": status
 
             }).execute()
-
 
         st.success(
             "Exames adicionados"
@@ -1067,7 +691,9 @@ if st.button(
         st.rerun()
 
 
-# ================= TABELA =================
+# ============================================================
+# TABELA
+# ============================================================
 
 st.subheader(
     "Tabela de exames"
@@ -1076,18 +702,28 @@ st.subheader(
 
 if not df.empty:
 
+    df["Excluir"] = False
+
+
+    # --------------------------------------------------------
+    # FILTRO
+    # --------------------------------------------------------
+
     with st.popover(
         "🔎 Filtrar exames"
     ):
 
         filtro = st.radio(
+
             "Mostrar:",
+
             [
                 "Todos os exames",
                 "🔴 Vencidos",
                 "🟡 Em alerta",
                 "🟢 Válidos"
             ],
+
             index=0
         )
 
@@ -1106,7 +742,6 @@ if not df.empty:
             )
         ]
 
-
     elif filtro == "🟡 Em alerta":
 
         df_tabela = df[
@@ -1115,7 +750,6 @@ if not df.empty:
                 na=False
             )
         ]
-
 
     elif filtro == "🟢 Válidos":
 
@@ -1126,18 +760,9 @@ if not df.empty:
             )
         ]
 
-
     else:
 
         df_tabela = df
-
-
-    df_tabela = df_tabela.copy()
-
-
-    df_tabela["Excluir"] = df_tabela.index.isin(
-        st.session_state.exclusoes_pendentes
-    )
 
 
     colunas = [
@@ -1157,98 +782,12 @@ if not df.empty:
         "status",
 
         "Excluir"
-
     ]
 
 
-    # ================= FUNÇÃO EXCLUSÕES =================
-
-    def atualizar_exclusoes():
-
-        estado_editor = st.session_state.get(
-            "editor_exames",
-            {}
-        )
-
-
-        alteracoes = estado_editor.get(
-            "edited_rows",
-            {}
-        )
-
-
-        indices_visiveis = list(
-            df_tabela.index
-        )
-
-
-        for linha, valores in alteracoes.items():
-
-            try:
-
-                linha = int(linha)
-
-
-                if (
-                    linha < 0
-                    or
-                    linha >= len(indices_visiveis)
-                ):
-
-                    continue
-
-
-                indice_df = indices_visiveis[
-                    linha
-                ]
-
-
-                id_exame = df.loc[
-                    indice_df,
-                    "id"
-                ]
-
-
-                if "Excluir" in valores:
-
-                    if valores["Excluir"]:
-
-                        st.session_state.exclusoes_pendentes.add(
-                            id_exame
-                        )
-
-                    else:
-
-                        st.session_state.exclusoes_pendentes.discard(
-                            id_exame
-                        )
-
-
-            except Exception:
-
-                pass
-
-
-        # Guarda a informação de que existem alterações
-        # não salvas no navegador
-        if st.session_state.exclusoes_pendentes:
-
-            cookie_manager.set(
-                "controle_exames_pendente",
-                "1",
-                max_age=60 * 60 * 24,
-                secure=True,
-                same_site="lax"
-            )
-
-        else:
-
-            cookie_manager.delete(
-                "controle_exames_pendente"
-            )
-
-
-    # ================= TABELA BLOQUEADA =================
+    # --------------------------------------------------------
+    # TABELA
+    # --------------------------------------------------------
 
     tabela = st.data_editor(
 
@@ -1257,69 +796,68 @@ if not df.empty:
         use_container_width=True,
 
         disabled=[
-
             "cpf",
-
             "paciente",
-
             "prontuario_registro",
-
             "exame",
-
             "data_exame",
-
             "data_vencimento",
-
             "status"
-
         ],
 
-        key="editor_exames",
-
-        on_change=atualizar_exclusoes
-
+        hide_index=True
     )
 
 
-    # ================= SALVAR =================
+    # --------------------------------------------------------
+    # IDENTIFICAR EXCLUSÕES SELECIONADAS
+    # --------------------------------------------------------
+
+    exclusoes = tabela[
+        tabela["Excluir"] == True
+    ].index.tolist()
+
+
+    st.session_state.exclusoes_pendentes = (
+        len(exclusoes) > 0
+    )
+
+
+    # --------------------------------------------------------
+    # SALVAR ALTERAÇÕES
+    # --------------------------------------------------------
 
     if st.button(
         "Salvar alterações"
     ):
 
-        try:
-
-            for id_excluir in st.session_state.exclusoes_pendentes:
-
-                supabase.table(
-                    "exames"
-                ).delete().eq(
-                    "id",
-                    id_excluir
-                ).execute()
+        excluir_index = tabela[
+            tabela["Excluir"] == True
+        ].index.tolist()
 
 
-            st.session_state.exclusoes_pendentes = set()
+        for index in excluir_index:
+
+            id_excluir = df.loc[
+                index,
+                "id"
+            ]
+
+            supabase.table(
+                "exames"
+            ).delete().eq(
+                "id",
+                id_excluir
+            ).execute()
 
 
-            cookie_manager.delete(
-                "controle_exames_pendente"
-            )
+        st.session_state.exclusoes_pendentes = False
 
+        st.success(
+            "Alterações salvas"
+        )
 
-            st.success(
-                "Alterações salvas"
-            )
-
-
-            st.rerun()
-
-
-        except Exception as e:
-
-            st.error(
-                f"Erro ao salvar as alterações: {e}"
-            )
+        st.rerun()
 
 
 else:
