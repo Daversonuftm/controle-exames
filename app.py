@@ -18,6 +18,12 @@ st.set_page_config(page_title="Controle de Exames", layout="wide")
 if "user" not in st.session_state:
     st.session_state.user = None
 
+if "exclusoes_pendentes" not in st.session_state:
+    st.session_state.exclusoes_pendentes = set()
+
+if "confirmar_saida" not in st.session_state:
+    st.session_state.confirmar_saida = False
+
 st.title("Sistema de Controle de Exames")
 
 if not st.session_state.user:
@@ -63,6 +69,8 @@ if not st.session_state.user:
                 })
 
                 st.session_state.user = user
+                st.session_state.exclusoes_pendentes = set()
+                st.session_state.confirmar_saida = False
 
                 st.rerun()
 
@@ -495,6 +503,70 @@ if st.session_state.ultima_atualizacao:
 st.divider()
 
 
+# ================= BOTÃO SAIR =================
+
+col_sair, col_vazia = st.columns([1, 5])
+
+with col_sair:
+
+    if st.button("🚪 Sair"):
+
+        if st.session_state.exclusoes_pendentes:
+
+            st.session_state.confirmar_saida = True
+
+        else:
+
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+
+            st.session_state.user = None
+            st.session_state.exclusoes_pendentes = set()
+            st.session_state.confirmar_saida = False
+
+            st.rerun()
+
+
+# ================= CONFIRMAÇÃO DE SAÍDA =================
+
+if st.session_state.confirmar_saida:
+
+    st.warning(
+        "⚠️ Existem alterações não salvas. "
+        "Se você sair agora, essas alterações serão perdidas."
+    )
+
+    col_continuar, col_sair = st.columns(2)
+
+    with col_continuar:
+
+        if st.button("Continuar editando"):
+
+            st.session_state.confirmar_saida = False
+
+            st.rerun()
+
+    with col_sair:
+
+        if st.button("Sair sem salvar"):
+
+            try:
+                supabase.auth.sign_out()
+            except Exception:
+                pass
+
+            st.session_state.user = None
+            st.session_state.exclusoes_pendentes = set()
+            st.session_state.confirmar_saida = False
+
+            st.rerun()
+
+
+st.divider()
+
+
 # ================= UPLOAD =================
 
 arquivos = st.file_uploader(
@@ -578,8 +650,6 @@ st.subheader(
 
 if not df.empty:
 
-    df["Excluir"] = False
-
     # ================= FILTRO =================
 
     with st.popover("🔎 Filtrar exames"):
@@ -632,6 +702,15 @@ if not df.empty:
         df_tabela = df
 
 
+    # ================= COLUNA EXCLUIR =================
+
+    df_tabela = df_tabela.copy()
+
+    df_tabela["Excluir"] = df_tabela.index.isin(
+        st.session_state.exclusoes_pendentes
+    )
+
+
     colunas = [
         "cpf",
         "paciente",
@@ -644,39 +723,108 @@ if not df.empty:
     ]
 
 
+    # ================= FUNÇÃO PARA CONTROLAR EXCLUSÕES =================
+
+    def atualizar_exclusoes():
+
+        estado_editor = st.session_state.get(
+            "editor_exames",
+            {}
+        )
+
+        alteracoes = estado_editor.get(
+            "edited_rows",
+            {}
+        )
+
+        indices_visiveis = list(
+            df_tabela.index
+        )
+
+        for linha, valores in alteracoes.items():
+
+            try:
+
+                linha = int(linha)
+
+                if linha < 0 or linha >= len(indices_visiveis):
+                    continue
+
+                indice_df = indices_visiveis[linha]
+
+                id_exame = df.loc[
+                    indice_df,
+                    "id"
+                ]
+
+                if "Excluir" in valores:
+
+                    if valores["Excluir"]:
+
+                        st.session_state.exclusoes_pendentes.add(
+                            id_exame
+                        )
+
+                    else:
+
+                        st.session_state.exclusoes_pendentes.discard(
+                            id_exame
+                        )
+
+            except Exception:
+
+                pass
+
+
+    # ================= TABELA BLOQUEADA =================
+
     tabela = st.data_editor(
         df_tabela[colunas],
-        use_container_width=True
+        use_container_width=True,
+        disabled=[
+            "cpf",
+            "paciente",
+            "prontuario_registro",
+            "exame",
+            "data_exame",
+            "data_vencimento",
+            "status"
+        ],
+        key="editor_exames",
+        on_change=atualizar_exclusoes
     )
 
+
+    # ================= SALVAR ALTERAÇÕES =================
 
     if st.button(
         "Salvar alterações"
     ):
 
-        excluir_index = tabela[
-            tabela["Excluir"] == True
-        ].index.tolist()
+        try:
 
-        for index in excluir_index:
+            for id_excluir in st.session_state.exclusoes_pendentes:
 
-            id_excluir = df.loc[
-                index,
-                "id"
-            ]
+                supabase.table(
+                    "exames"
+                ).delete().eq(
+                    "id",
+                    id_excluir
+                ).execute()
 
-            supabase.table(
-                "exames"
-            ).delete().eq(
-                "id",
-                id_excluir
-            ).execute()
+            st.session_state.exclusoes_pendentes = set()
 
-        st.success(
-            "Alterações salvas"
-        )
+            st.success(
+                "Alterações salvas"
+            )
 
-        st.rerun()
+            st.rerun()
+
+        except Exception as e:
+
+            st.error(
+                f"Erro ao salvar as alterações: {e}"
+            )
 
 
 else:
