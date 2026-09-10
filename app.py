@@ -291,16 +291,36 @@ def ler_pdf(arquivo):
             if conteudo:
                 texto += conteudo + "\n"
 
-    cpf = None
 
-    cpf_match = re.search(
-        r'CPF[:\s]*([0-9\.\-]{11,14})',
-        texto
-    )
+    # ================= DATA DE NASCIMENTO =================
 
-    if cpf_match:
+    data_nascimento = None
 
-        cpf = cpf_match.group(1)
+    padroes_nascimento = [
+        r'Dt\.\s*Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+        r'Data\s+de\s+Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+        r'Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
+    ]
+
+    for padrao in padroes_nascimento:
+
+        match_nascimento = re.search(
+            padrao,
+            texto,
+            re.IGNORECASE
+        )
+
+        if match_nascimento:
+
+            data_nascimento = datetime.strptime(
+                match_nascimento.group(1),
+                "%d/%m/%Y"
+            )
+
+            break
+
+
+    # ================= NOME =================
 
     nome = None
 
@@ -324,6 +344,9 @@ def ler_pdf(arquivo):
             )
 
             break
+
+
+    # ================= DATA DO EXAME =================
 
     data_exame = None
 
@@ -351,6 +374,7 @@ def ler_pdf(arquivo):
 
             break
 
+
     if not data_exame:
 
         for linha in texto.split("\n"):
@@ -372,7 +396,11 @@ def ler_pdf(arquivo):
 
                 break
 
+
     tipo_exame = identificar_exame(texto)
+
+
+    # ================= PRONTUÁRIO / REGISTRO =================
 
     prontuario_registro = None
 
@@ -390,6 +418,7 @@ def ler_pdf(arquivo):
             match_prontuario.group(1)
         )
 
+
     if not prontuario_registro:
 
         match_registro = re.search(
@@ -402,8 +431,9 @@ def ler_pdf(arquivo):
 
             prontuario_registro = match_registro.group(1)
 
+
     return (
-        cpf,
+        data_nascimento,
         nome,
         data_exame,
         tipo_exame,
@@ -661,12 +691,13 @@ if st.button("Ler exames"):
         for arquivo in arquivos:
 
             (
-                cpf,
+                data_nascimento,
                 nome,
                 data_exame,
                 tipo_exame,
                 prontuario
             ) = ler_pdf(arquivo)
+
 
             if not data_exame:
 
@@ -676,19 +707,26 @@ if st.button("Ler exames"):
 
                 continue
 
+
             data_vencimento = (
                 data_exame + timedelta(days=180)
             )
+
 
             status = calcular_status(
                 data_vencimento
             )
 
+
             supabase.table("exames").insert({
 
                 "hospital_id": user_id,
 
-                "cpf": cpf,
+                "data_nascimento": (
+                    data_nascimento.strftime("%d/%m/%Y")
+                    if data_nascimento
+                    else None
+                ),
 
                 "paciente": nome,
 
@@ -707,6 +745,7 @@ if st.button("Ler exames"):
                 "status": status
 
             }).execute()
+
 
         st.success(
             "Exames adicionados"
@@ -786,7 +825,7 @@ if not df.empty:
 
 
     colunas = [
-        "cpf",
+        "data_nascimento",
         "paciente",
         "prontuario_registro",
         "exame",
@@ -856,7 +895,7 @@ if not df.empty:
         df_tabela[colunas],
         use_container_width=True,
         disabled=[
-            "cpf",
+            "data_nascimento",
             "paciente",
             "prontuario_registro",
             "exame",
