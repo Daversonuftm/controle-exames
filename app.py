@@ -108,7 +108,8 @@ if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
 
-# Controle dos filtros
+# ================= CONTROLE DOS FILTROS =================
+
 if "filtro_status" not in st.session_state:
     st.session_state.filtro_status = "Todos os exames"
 
@@ -783,7 +784,7 @@ if not df.empty:
 
     with col_filtro_status:
 
-        with st.popover("🔎 Status", use_container_width=True):
+        with st.popover("🔎 Status"):
 
             filtro_status = st.radio(
                 "Mostrar:",
@@ -798,18 +799,24 @@ if not df.empty:
                     "🔴 Vencidos",
                     "🟡 Em alerta",
                     "🟢 Válidos"
-                ].index(st.session_state.filtro_status),
+                ].index(
+                    st.session_state.filtro_status
+                ),
                 key="filtro_status_input"
             )
 
             st.session_state.filtro_status = filtro_status
+
+        st.caption(
+            st.session_state.filtro_status
+        )
 
 
     # ================= FILTRO PACIENTE =================
 
     with col_filtro_paciente:
 
-        with st.popover("👤 Paciente", use_container_width=True):
+        with st.popover("👤 Paciente"):
 
             paciente_busca = st.text_input(
                 "Buscar paciente",
@@ -820,12 +827,24 @@ if not df.empty:
 
             st.session_state.busca_paciente = paciente_busca
 
+        if st.session_state.busca_paciente:
+
+            st.caption(
+                f"Paciente: {st.session_state.busca_paciente}"
+            )
+
+        else:
+
+            st.caption(
+                "Nenhum paciente selecionado"
+            )
+
 
     # ================= FILTRO PRONTUÁRIO =================
 
     with col_filtro_prontuario:
 
-        with st.popover("📋 Prontuário", use_container_width=True):
+        with st.popover("📋 Prontuário"):
 
             prontuario_busca = st.text_input(
                 "Buscar prontuário",
@@ -835,6 +854,18 @@ if not df.empty:
             )
 
             st.session_state.busca_prontuario = prontuario_busca
+
+        if st.session_state.busca_prontuario:
+
+            st.caption(
+                f"Prontuário: {st.session_state.busca_prontuario}"
+            )
+
+        else:
+
+            st.caption(
+                "Nenhum prontuário selecionado"
+            )
 
 
     filtro = st.session_state.filtro_status
@@ -906,39 +937,6 @@ if not df.empty:
                 na=False
             )
         ]
-
-
-    # ================= ESPECIFICAÇÕES DOS FILTROS =================
-
-    filtros_ativos = []
-
-    if filtro != "Todos os exames":
-        filtros_ativos.append(
-            f"Status: {filtro}"
-        )
-
-    if paciente_busca:
-        filtros_ativos.append(
-            f"Paciente: {paciente_busca}"
-        )
-
-    if prontuario_busca:
-        filtros_ativos.append(
-            f"Prontuário: {prontuario_busca}"
-        )
-
-    if filtros_ativos:
-
-        st.caption(
-            "Filtros ativos: " +
-            " | ".join(filtros_ativos)
-        )
-
-    else:
-
-        st.caption(
-            "Filtros ativos: Nenhum"
-        )
 
 
     # ================= COLUNA EXCLUIR =================
