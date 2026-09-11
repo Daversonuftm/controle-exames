@@ -108,6 +108,17 @@ if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
 
+# Controle dos filtros
+if "filtro_status" not in st.session_state:
+    st.session_state.filtro_status = "Todos os exames"
+
+if "busca_paciente" not in st.session_state:
+    st.session_state.busca_paciente = ""
+
+if "busca_prontuario" not in st.session_state:
+    st.session_state.busca_prontuario = ""
+
+
 st.title("Sistema de Controle de Exames")
 
 
@@ -763,34 +774,72 @@ st.subheader(
 
 if not df.empty:
 
-    # ================= FILTRO =================
+    # ================= FILTROS =================
 
-    with st.popover("🔎 Filtrar exames"):
+    col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(3)
 
-        filtro = st.radio(
-            "Mostrar:",
-            [
-                "Todos os exames",
-                "🔴 Vencidos",
-                "🟡 Em alerta",
-                "🟢 Válidos"
-            ],
-            index=0
-        )
 
-        paciente_busca = st.text_input(
-            "Paciente",
-            placeholder="Digite o nome do paciente"
-        )
+    # ================= FILTRO STATUS =================
 
-        prontuario_busca = st.text_input(
-            "Prontuário",
-            placeholder="Digite o número do prontuário"
-        )
+    with col_filtro_status:
 
-    st.caption(
-        f"Filtro atual: {filtro}"
-    )
+        with st.popover("🔎 Status", use_container_width=True):
+
+            filtro_status = st.radio(
+                "Mostrar:",
+                [
+                    "Todos os exames",
+                    "🔴 Vencidos",
+                    "🟡 Em alerta",
+                    "🟢 Válidos"
+                ],
+                index=[
+                    "Todos os exames",
+                    "🔴 Vencidos",
+                    "🟡 Em alerta",
+                    "🟢 Válidos"
+                ].index(st.session_state.filtro_status),
+                key="filtro_status_input"
+            )
+
+            st.session_state.filtro_status = filtro_status
+
+
+    # ================= FILTRO PACIENTE =================
+
+    with col_filtro_paciente:
+
+        with st.popover("👤 Paciente", use_container_width=True):
+
+            paciente_busca = st.text_input(
+                "Buscar paciente",
+                value=st.session_state.busca_paciente,
+                placeholder="Digite o nome",
+                key="paciente_busca_input"
+            )
+
+            st.session_state.busca_paciente = paciente_busca
+
+
+    # ================= FILTRO PRONTUÁRIO =================
+
+    with col_filtro_prontuario:
+
+        with st.popover("📋 Prontuário", use_container_width=True):
+
+            prontuario_busca = st.text_input(
+                "Buscar prontuário",
+                value=st.session_state.busca_prontuario,
+                placeholder="Digite o número",
+                key="prontuario_busca_input"
+            )
+
+            st.session_state.busca_prontuario = prontuario_busca
+
+
+    filtro = st.session_state.filtro_status
+    paciente_busca = st.session_state.busca_paciente
+    prontuario_busca = st.session_state.busca_prontuario
 
 
     # ================= FILTRO POR STATUS =================
@@ -859,12 +908,14 @@ if not df.empty:
         ]
 
 
-    # ================= INDICADOR DOS FILTROS =================
+    # ================= ESPECIFICAÇÕES DOS FILTROS =================
 
     filtros_ativos = []
 
     if filtro != "Todos os exames":
-        filtros_ativos.append(filtro)
+        filtros_ativos.append(
+            f"Status: {filtro}"
+        )
 
     if paciente_busca:
         filtros_ativos.append(
