@@ -638,15 +638,10 @@ if "busca_prontuario" not in st.session_state:
     st.session_state.busca_prontuario = ""
 
 
-# NOVO:
-# guarda as mensagens do processamento até o usuário clicar OK
-
 if "mensagens_processamento" not in st.session_state:
 
     st.session_state.mensagens_processamento = []
 
-
-# Controle das exclusões
 
 if "exclusoes_pendentes" not in st.session_state:
 
@@ -732,7 +727,6 @@ if not st.session_state.user:
                     )
                 )
 
-                # Atualiza os status no momento do login
                 user_id_login = user.user.id
 
                 atualizar_status_exames(
@@ -1374,9 +1368,6 @@ if st.button(
 
             except Exception as e:
 
-                # Se o banco falhar,
-                # remove o PDF que acabou de ser enviado.
-
                 try:
 
                     supabase.storage.from_(
@@ -1431,8 +1422,6 @@ if st.button(
                         "arquivo_path"
                     )
 
-                    # Primeiro remove da tabela do banco
-
                     try:
 
                         supabase.table(
@@ -1446,8 +1435,6 @@ if st.button(
 
                         continue
 
-
-                    # Depois remove o PDF antigo do Storage
 
                     if arquivo_antigo:
 
@@ -1516,9 +1503,9 @@ if st.button(
                 )
 
 
-        # =====================================================
-        # GUARDAR MENSAGENS PARA APARECEREM APÓS O RERUN
-        # =====================================================
+    # =========================================================
+    # GUARDAR MENSAGENS PARA APARECEREM APÓS O RERUN
+    # =========================================================
 
     st.session_state.mensagens_processamento = mensagens
 
@@ -1979,9 +1966,13 @@ if not df.empty:
 
             with col_confirmar:
 
+                # CORREÇÃO:
+                # a key do botão não pode ser igual à variável
+                # usada no st.session_state.
+
                 if st.button(
                     "Confirmar exclusão",
-                    key="confirmar_exclusao"
+                    key="botao_confirmar_exclusao"
                 ):
 
                     erros = []
