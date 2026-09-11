@@ -638,10 +638,18 @@ if "busca_prontuario" not in st.session_state:
     st.session_state.busca_prontuario = ""
 
 
+# ============================================================
+# MENSAGENS
+# ============================================================
+
 if "mensagens_processamento" not in st.session_state:
 
     st.session_state.mensagens_processamento = []
 
+
+# ============================================================
+# CONTROLE DAS EXCLUSÕES
+# ============================================================
 
 if "exclusoes_pendentes" not in st.session_state:
 
@@ -727,6 +735,7 @@ if not st.session_state.user:
                     )
                 )
 
+                # Atualiza os status no momento do login
                 user_id_login = user.user.id
 
                 atualizar_status_exames(
@@ -810,18 +819,15 @@ user_id = st.session_state.user.user.id
 
 
 # ============================================================
-# CAIXA DE RESULTADO DO PROCESSAMENTO
+# JANELA DE MENSAGENS DO PROCESSAMENTO
 # ============================================================
 
 if st.session_state.mensagens_processamento:
 
-    with st.container(
-        border=True
-    ):
-
-        st.subheader(
-            "Resultado do processamento"
-        )
+    @st.dialog(
+        "Resultado do processamento"
+    )
+    def mostrar_mensagens_processamento():
 
         for tipo_mensagem, mensagem in (
             st.session_state.mensagens_processamento
@@ -852,6 +858,9 @@ if st.session_state.mensagens_processamento:
                 )
 
 
+        st.divider()
+
+
         if st.button(
             "OK, entendi",
             key="ok_resultado_processamento"
@@ -860,6 +869,9 @@ if st.session_state.mensagens_processamento:
             st.session_state.mensagens_processamento = []
 
             st.rerun()
+
+
+    mostrar_mensagens_processamento()
 
 
 # ============================================================
@@ -1368,6 +1380,9 @@ if st.button(
 
             except Exception as e:
 
+                # Se o banco falhar,
+                # remove o PDF que acabou de ser enviado.
+
                 try:
 
                     supabase.storage.from_(
@@ -1422,6 +1437,8 @@ if st.button(
                         "arquivo_path"
                     )
 
+                    # Primeiro remove da tabela do banco
+
                     try:
 
                         supabase.table(
@@ -1435,6 +1452,8 @@ if st.button(
 
                         continue
 
+
+                    # Depois remove o PDF antigo do Storage
 
                     if arquivo_antigo:
 
@@ -1503,9 +1522,9 @@ if st.button(
                 )
 
 
-    # =========================================================
-    # GUARDAR MENSAGENS PARA APARECEREM APÓS O RERUN
-    # =========================================================
+        # =====================================================
+        # GUARDAR MENSAGENS
+        # =====================================================
 
     st.session_state.mensagens_processamento = mensagens
 
@@ -1929,21 +1948,26 @@ if not df.empty:
 
 
     # ========================================================
-    # CONFIRMAÇÃO DA EXCLUSÃO
+    # JANELA DE CONFIRMAÇÃO DA EXCLUSÃO
     # ========================================================
 
     if st.session_state.confirmar_exclusao:
 
-        with st.container(
-            border=True
-        ):
+        @st.dialog(
+            "Pense bem!"
+        )
+        def mostrar_confirmacao_exclusao():
 
-            st.warning(
-                "⚠️ Tem certeza que deseja excluir "
-                "os exames selecionados? "
+            st.write(
+                "Você quer mesmo excluir os exames selecionados?"
+            )
+
+            st.write(
                 "O registro será removido do sistema "
                 "e o PDF correspondente também será excluído."
             )
+
+            st.divider()
 
             col_cancelar, col_confirmar = st.columns(
                 2
@@ -1965,10 +1989,6 @@ if not df.empty:
 
 
             with col_confirmar:
-
-                # CORREÇÃO:
-                # a key do botão não pode ser igual à variável
-                # usada no st.session_state.
 
                 if st.button(
                     "Confirmar exclusão",
@@ -2062,6 +2082,9 @@ if not df.empty:
 
 
                     st.rerun()
+
+
+        mostrar_confirmacao_exclusao()
 
 
 else:
