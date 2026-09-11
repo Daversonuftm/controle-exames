@@ -859,8 +859,6 @@ if st.button(
 
         for arquivo in arquivos:
 
-            # Guarda os bytes do PDF antes do processamento
-
             arquivo_bytes = arquivo.getvalue()
 
 
@@ -1256,14 +1254,25 @@ if not df.empty:
 
             else:
 
-                link = None
+                link = getattr(
+                    resposta,
+                    "signed_url",
+                    None
+                )
+
+
+                if not link:
+
+                    link = getattr(
+                        resposta,
+                        "signedURL",
+                        None
+                    )
 
 
             if link:
 
-                return (
-                    f"{link}#{nome_exame}"
-                )
+                return link
 
 
         except Exception:
@@ -1271,7 +1280,7 @@ if not df.empty:
             pass
 
 
-        return nome_exame
+        return ""
 
 
     df_tabela["exame_link"] = df_tabela.apply(
@@ -1379,7 +1388,7 @@ if not df.empty:
 
             "exame_link": st.column_config.LinkColumn(
                 "exame",
-                display_text=r".*#(.*)"
+                display_text="Abrir PDF"
             )
 
         },
