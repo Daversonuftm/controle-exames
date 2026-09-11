@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
+import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from supabase import create_client
@@ -702,6 +703,9 @@ if st.button("Ler exames"):
 
         for arquivo in arquivos:
 
+            # Guarda os bytes do PDF antes do processamento
+            arquivo_bytes = arquivo.getvalue()
+
             (
                 data_nascimento,
                 nome,
@@ -730,33 +734,102 @@ if st.button("Ler exames"):
             )
 
 
-            supabase.table("exames").insert({
+            # ================= ARQUIVO PDF =================
 
-                "hospital_id": user_id,
+            nome_arquivo = re.sub(
+                r"[^A-Za-z0-9._-]",
+                "_",
+                arquivo.name
+            )
 
-                "data_nascimento": (
-                    data_nascimento.strftime("%d/%m/%Y")
-                    if data_nascimento
-                    else None
-                ),
+            nome_unico = (
+                f"{uuid.uuid4().hex}_{nome_arquivo}"
+            )
 
-                "paciente": nome,
+            arquivo_path = (
+                f"{user_id}/{nome_unico}"
+            )
 
-                "prontuario_registro": prontuario,
 
-                "exame": tipo_exame,
+            try:
 
-                "data_exame": data_exame.strftime(
-                    "%d/%m/%Y"
-                ),
+                supabase.storage.from_(
+                    "exames-pdf"
+                ).upload(
+                    arquivo_path,
+                    arquivo_bytes,
+                    {
+                        "content-type": "application/pdf",
+                        "upsert": "false"
+                    }
+                )
 
-                "data_vencimento": data_vencimento.strftime(
-                    "%d/%m/%Y"
-                ),
+            except Exception as e:
 
-                "status": status
+                st.error(
+                    f"Erro ao armazenar o PDF {arquivo.name}: {e}"
+                )
 
-            }).execute()
+                continue
+
+
+            # ================= SALVAR NO BANCO =================
+
+            try:
+
+                supabase.table("exames").insert({
+
+                    "hospital_id": user_id,
+
+                    "data_nascimento": (
+                        data_nascimento.strftime("%d/%m/%Y")
+                        if data_nascimento
+                        else None
+                    ),
+
+                    "paciente": nome,
+
+                    "prontuario_registro": prontuario,
+
+                    "exame": tipo_exame,
+
+                    "data_exame": data_exame.strftime(
+                        "%d/%m/%Y"
+                    ),
+
+                    "data_vencimento": data_vencimento.strftime(
+                        "%d/%m/%Y"
+                    ),
+
+                    "status": status,
+
+                    "arquivo_path": arquivo_path
+
+                }).execute()
+
+
+            except Exception as e:
+
+                # Se o registro não puder ser salvo,
+                # remove o PDF que acabou de ser enviado.
+
+                try:
+
+                    supabase.storage.from_(
+                        "exames-pdf"
+                    ).remove([
+                        arquivo_path
+                    ])
+
+                except Exception:
+
+                    pass
+
+                st.error(
+                    f"Erro ao salvar os dados de {arquivo.name}: {e}"
+                )
+
+                continue
 
 
         st.success(
