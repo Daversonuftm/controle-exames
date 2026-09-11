@@ -778,10 +778,22 @@ if not df.empty:
             index=0
         )
 
+        paciente_busca = st.text_input(
+            "Paciente",
+            placeholder="Digite o nome do paciente"
+        )
+
+        prontuario_busca = st.text_input(
+            "Prontuário",
+            placeholder="Digite o número do prontuário"
+        )
+
     st.caption(
         f"Filtro atual: {filtro}"
     )
 
+
+    # ================= FILTRO POR STATUS =================
 
     if filtro == "🔴 Vencidos":
 
@@ -813,6 +825,69 @@ if not df.empty:
     else:
 
         df_tabela = df
+
+
+    # ================= FILTRO POR PACIENTE =================
+
+    if paciente_busca:
+
+        df_tabela = df_tabela[
+            df_tabela["paciente"]
+            .fillna("")
+            .astype(str)
+            .str.contains(
+                re.escape(paciente_busca),
+                case=False,
+                na=False
+            )
+        ]
+
+
+    # ================= FILTRO POR PRONTUÁRIO =================
+
+    if prontuario_busca:
+
+        df_tabela = df_tabela[
+            df_tabela["prontuario_registro"]
+            .fillna("")
+            .astype(str)
+            .str.contains(
+                re.escape(prontuario_busca),
+                case=False,
+                na=False
+            )
+        ]
+
+
+    # ================= INDICADOR DOS FILTROS =================
+
+    filtros_ativos = []
+
+    if filtro != "Todos os exames":
+        filtros_ativos.append(filtro)
+
+    if paciente_busca:
+        filtros_ativos.append(
+            f"Paciente: {paciente_busca}"
+        )
+
+    if prontuario_busca:
+        filtros_ativos.append(
+            f"Prontuário: {prontuario_busca}"
+        )
+
+    if filtros_ativos:
+
+        st.caption(
+            "Filtros ativos: " +
+            " | ".join(filtros_ativos)
+        )
+
+    else:
+
+        st.caption(
+            "Filtros ativos: Nenhum"
+        )
 
 
     # ================= COLUNA EXCLUIR =================
