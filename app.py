@@ -7,12 +7,23 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from supabase import create_client
 
-# 🔑 SUPABASE
-url = "https://dpouzkapdaipnfnlsrio.supabase.co"
-key = "sb_publishable_hhN-A_o0Q9Y6o8lTGr2xCw_iBbSSXca"
-supabase = create_client(url, key)
 
-st.set_page_config(page_title="Controle de Exames", layout="wide")
+# 🔑 SUPABASE
+
+url = "https://dpouzkapdaipnfnlsrio.supabase.co"
+
+key = "sb_publishable_hhN-A_o0Q9Y6o8lTGr2xCw_iBbSSXca"
+
+supabase = create_client(
+    url,
+    key
+)
+
+
+st.set_page_config(
+    page_title="Controle de Exames",
+    layout="wide"
+)
 
 
 # ================= FUNÇÕES DE STATUS =================
@@ -24,6 +35,7 @@ def calcular_status(data_vencimento):
     ).date()
 
     if isinstance(data_vencimento, datetime):
+
         data_vencimento = data_vencimento.date()
 
     dias_para_vencer = (
@@ -31,15 +43,23 @@ def calcular_status(data_vencimento):
     ).days
 
     if dias_para_vencer < 0:
+
         return "🔴 VENCIDO"
 
     if dias_para_vencer <= 30:
+
         return "🟡 EM ALERTA"
 
     return "🟢 VALIDO"
 
 
 def atualizar_status_exames(user_id):
+
+    """
+    Atualiza os status de todos os exames do usuário.
+    Esta é a mesma função utilizada pelo botão manual
+    e pela atualização automática.
+    """
 
     exames_atualizados = supabase.table(
         "exames"
@@ -90,11 +110,14 @@ def atualizar_status_exames(user_id):
 if "user" not in st.session_state:
     st.session_state.user = None
 
+
 if "exclusoes_pendentes" not in st.session_state:
     st.session_state.exclusoes_pendentes = set()
 
+
 if "confirmar_saida" not in st.session_state:
     st.session_state.confirmar_saida = False
+
 
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
@@ -105,25 +128,32 @@ if "ultima_atualizacao" not in st.session_state:
 if "filtro_status" not in st.session_state:
     st.session_state.filtro_status = "Todos os exames"
 
+
 if "busca_paciente" not in st.session_state:
     st.session_state.busca_paciente = ""
+
 
 if "busca_prontuario" not in st.session_state:
     st.session_state.busca_prontuario = ""
 
 
-st.title("Sistema de Controle de Exames")
+st.title(
+    "Sistema de Controle de Exames"
+)
 
 
 if not st.session_state.user:
 
     st.subheader("Login")
 
+
     # ================= FORMULÁRIO LOGIN/CADASTRO =================
 
     with st.form("form_login"):
 
-        email = st.text_input("Email")
+        email = st.text_input(
+            "Email"
+        )
 
         senha = st.text_input(
             "Senha",
@@ -133,10 +163,16 @@ if not st.session_state.user:
         col1, col2 = st.columns(2)
 
         with col1:
-            entrar = st.form_submit_button("Entrar")
+
+            entrar = st.form_submit_button(
+                "Entrar"
+            )
 
         with col2:
-            cadastrar = st.form_submit_button("Cadastrar")
+
+            cadastrar = st.form_submit_button(
+                "Cadastrar"
+            )
 
 
     # ================= ENTRAR =================
@@ -158,6 +194,7 @@ if not st.session_state.user:
                     "password": senha
                 })
 
+
                 # ================= ATUALIZA STATUS AO LOGAR =================
 
                 user_id_login = user.user.id
@@ -166,12 +203,17 @@ if not st.session_state.user:
                     user_id_login
                 )
 
+
                 st.session_state.user = user
+
                 st.session_state.exclusoes_pendentes = set()
+
                 st.session_state.confirmar_saida = False
+
                 st.session_state.ultima_atualizacao = None
 
                 st.rerun()
+
 
             except Exception as e:
 
@@ -212,6 +254,7 @@ if not st.session_state.user:
                     f"Erro ao cadastrar: {e}"
                 )
 
+
     st.stop()
 
 
@@ -224,6 +267,7 @@ if st.session_state.user:
         st.session_state.user.session.refresh_token
     )
 
+
 user_id = st.session_state.user.user.id
 
 
@@ -232,16 +276,29 @@ user_id = st.session_state.user.user.id
 def identificar_exame(texto):
 
     if texto.lower().count("resultado") > 5:
+
         return "LAUDO PRÉ TRANSPLANTE"
+
 
     linhas = texto.split("\n")
 
+
     palavras_chave = [
-        "ELETROCARDIOGRAMA", "ULTRASSONOGRAFIA", "ENDOSCOPIA",
-        "ECOCARDIOGRAMA", "TESTE ERGOMÉTRICO", "TESTE ERGOMETRICO",
-        "DOPPLER", "HEMODINÂMICO", "HEMODINAMICO",
-        "CORONARIOGRAFIA", "CATETERISMO"
+
+        "ELETROCARDIOGRAMA",
+        "ULTRASSONOGRAFIA",
+        "ENDOSCOPIA",
+        "ECOCARDIOGRAMA",
+        "TESTE ERGOMÉTRICO",
+        "TESTE ERGOMETRICO",
+        "DOPPLER",
+        "HEMODINÂMICO",
+        "HEMODINAMICO",
+        "CORONARIOGRAFIA",
+        "CATETERISMO"
+
     ]
+
 
     for linha in linhas:
 
@@ -253,19 +310,29 @@ def identificar_exame(texto):
 
                 return linha_limpa.upper()
 
+
     texto = texto.lower()
 
+
     if "endoscopia" in texto or "eda" in texto:
+
         return "ENDOSCOPIA"
 
+
     if "ecocardiograma" in texto or "ecocardiografia" in texto:
+
         return "ECOCARDIOGRAMA"
 
+
     if "ultrassom" in texto or "ultrassonografia" in texto:
+
         return "ULTRASSOM"
 
+
     if "pré tx" in texto or "pre tx" in texto:
+
         return "LAUDO PRÉ TRANSPLANTE"
+
 
     return "EXAME"
 
@@ -286,6 +353,7 @@ def ler_pdf(arquivo):
 
     texto = ""
 
+
     with pdfplumber.open(arquivo) as pdf:
 
         for page in pdf.pages:
@@ -293,6 +361,7 @@ def ler_pdf(arquivo):
             conteudo = page.extract_text()
 
             if conteudo:
+
                 texto += conteudo + "\n"
 
 
@@ -300,11 +369,17 @@ def ler_pdf(arquivo):
 
     data_nascimento = None
 
+
     padroes_nascimento = [
+
         r'Dt\.\s*Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+
         r'Data\s+de\s+Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+
         r'Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
+
     ]
+
 
     for padrao in padroes_nascimento:
 
@@ -313,6 +388,7 @@ def ler_pdf(arquivo):
             texto,
             re.IGNORECASE
         )
+
 
         if match_nascimento:
 
@@ -328,11 +404,17 @@ def ler_pdf(arquivo):
 
     nome = None
 
+
     padroes_nome = [
+
         r'Nome Civil:\s*(.*)',
+
         r'Nome\s*\.{0,}\s*:\s*(.*)',
+
         r'Paciente:\s*(.*)'
+
     ]
+
 
     for padrao in padroes_nome:
 
@@ -340,6 +422,7 @@ def ler_pdf(arquivo):
             padrao,
             texto
         )
+
 
         if match:
 
@@ -354,12 +437,19 @@ def ler_pdf(arquivo):
 
     data_exame = None
 
+
     padroes_data = [
+
         r'Data do exame[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+
         r'Data realização[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+
         r'Realização[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
+
         r'Emissão do laudo[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
+
     ]
+
 
     for padrao in padroes_data:
 
@@ -368,6 +458,7 @@ def ler_pdf(arquivo):
             texto,
             re.IGNORECASE
         )
+
 
         if match:
 
@@ -384,12 +475,15 @@ def ler_pdf(arquivo):
         for linha in texto.split("\n"):
 
             if "nasc" in linha.lower():
+
                 continue
+
 
             match = re.search(
                 r'\d{2}/\d{2}/\d{4}',
                 linha
             )
+
 
             if match:
 
@@ -401,18 +495,22 @@ def ler_pdf(arquivo):
                 break
 
 
-    tipo_exame = identificar_exame(texto)
+    tipo_exame = identificar_exame(
+        texto
+    )
 
 
     # ================= PRONTUÁRIO / REGISTRO =================
 
     prontuario_registro = None
 
+
     match_prontuario = re.search(
         r'Prontu[aá]rio[:\s]*([0-9/]+)',
         texto,
         re.IGNORECASE
     )
+
 
     if match_prontuario:
 
@@ -431,6 +529,7 @@ def ler_pdf(arquivo):
             re.IGNORECASE
         )
 
+
         if match_registro:
 
             prontuario_registro = match_registro.group(1)
@@ -447,12 +546,19 @@ def ler_pdf(arquivo):
 
 # ================= BANCO =================
 
-res = supabase.table("exames").select("*").eq(
+res = supabase.table(
+    "exames"
+).select(
+    "*"
+).eq(
     "hospital_id",
     user_id
 ).execute()
 
-df = pd.DataFrame(res.data)
+
+df = pd.DataFrame(
+    res.data
+)
 
 
 # ================= ATUALIZAÇÃO AUTOMÁTICA INICIAL =================
@@ -468,22 +574,34 @@ if not df.empty:
                 "%d/%m/%Y"
             )
 
+
             novo_status = calcular_status(
                 data_vencimento
             )
 
-            status_atual = exame.get("status")
+
+            status_atual = exame.get(
+                "status"
+            )
+
 
             if status_atual != novo_status:
 
-                supabase.table("exames").update({
+                supabase.table(
+                    "exames"
+                ).update({
                     "status": novo_status
                 }).eq(
                     "id",
                     exame["id"]
                 ).execute()
 
-                df.loc[index, "status"] = novo_status
+
+                df.loc[
+                    index,
+                    "status"
+                ] = novo_status
+
 
         except Exception:
 
@@ -503,6 +621,7 @@ if not df.empty:
         ]
     )
 
+
     alerta = len(
         df[
             df["status"].str.contains(
@@ -511,6 +630,7 @@ if not df.empty:
             )
         ]
     )
+
 
     validos = len(
         df[
@@ -521,24 +641,30 @@ if not df.empty:
         ]
     )
 
+
 else:
 
     vencidos = 0
+
     alerta = 0
+
     validos = 0
 
 
 c1, c2, c3 = st.columns(3)
+
 
 c1.metric(
     "🔴 VENCIDOS",
     vencidos
 )
 
+
 c2.metric(
     "🟡 EM ALERTA",
     alerta
 )
+
 
 c3.metric(
     "🟢 VÁLIDOS",
@@ -561,15 +687,20 @@ def verificacao_automatica_status():
 
         return
 
+
     try:
 
         houve_alteracao = atualizar_status_exames(
             user_id
         )
 
+
         if houve_alteracao:
 
-            st.rerun(scope="app")
+            st.rerun(
+                scope="app"
+            )
+
 
     except Exception:
 
@@ -581,12 +712,16 @@ verificacao_automatica_status()
 
 # ================= ATUALIZAR STATUS + SAIR =================
 
-col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
+col_atualizar, col_espaco, col_sair = st.columns(
+    [1, 5, 1]
+)
 
 
 with col_atualizar:
 
-    if st.button("Atualizar status"):
+    if st.button(
+        "Atualizar status"
+    ):
 
         try:
 
@@ -594,11 +729,14 @@ with col_atualizar:
                 user_id
             )
 
+
             st.session_state.ultima_atualizacao = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
             )
 
+
             st.rerun()
+
 
         except Exception as e:
 
@@ -617,21 +755,30 @@ if st.session_state.ultima_atualizacao:
 
 with col_sair:
 
-    if st.button("Sair"):
+    if st.button(
+        "Sair"
+    ):
 
         if st.session_state.exclusoes_pendentes:
 
             st.session_state.confirmar_saida = True
 
+
         else:
 
             try:
+
                 supabase.auth.sign_out()
+
             except Exception:
+
                 pass
 
+
             st.session_state.user = None
+
             st.session_state.exclusoes_pendentes = set()
+
             st.session_state.confirmar_saida = False
 
             st.rerun()
@@ -646,27 +793,40 @@ if st.session_state.confirmar_saida:
         "Se você sair agora, essas alterações serão perdidas."
     )
 
+
     col_continuar, col_sair_confirmar = st.columns(2)
+
 
     with col_continuar:
 
-        if st.button("Continuar editando"):
+        if st.button(
+            "Continuar editando"
+        ):
 
             st.session_state.confirmar_saida = False
 
             st.rerun()
 
+
     with col_sair_confirmar:
 
-        if st.button("Sair sem salvar"):
+        if st.button(
+            "Sair sem salvar"
+        ):
 
             try:
+
                 supabase.auth.sign_out()
+
             except Exception:
+
                 pass
 
+
             st.session_state.user = None
+
             st.session_state.exclusoes_pendentes = set()
+
             st.session_state.confirmar_saida = False
 
             st.rerun()
@@ -684,17 +844,25 @@ arquivos = st.file_uploader(
 )
 
 
-if st.button("Ler exames"):
+if st.button(
+    "Ler exames"
+):
 
     if not arquivos:
 
-        st.warning("Selecione PDFs")
+        st.warning(
+            "Selecione PDFs"
+        )
+
 
     else:
 
         for arquivo in arquivos:
 
+            # Guarda os bytes do PDF antes do processamento
+
             arquivo_bytes = arquivo.getvalue()
+
 
             (
                 data_nascimento,
@@ -702,7 +870,10 @@ if st.button("Ler exames"):
                 data_exame,
                 tipo_exame,
                 prontuario
-            ) = ler_pdf(arquivo)
+            ) = ler_pdf(
+                arquivo
+            )
+
 
             if not data_exame:
 
@@ -712,9 +883,13 @@ if st.button("Ler exames"):
 
                 continue
 
+
             data_vencimento = (
-                data_exame + timedelta(days=180)
+                data_exame + timedelta(
+                    days=180
+                )
             )
+
 
             status = calcular_status(
                 data_vencimento
@@ -729,9 +904,11 @@ if st.button("Ler exames"):
                 arquivo.name
             )
 
+
             nome_unico = (
                 f"{uuid.uuid4().hex}_{nome_arquivo}"
             )
+
 
             arquivo_path = (
                 f"{user_id}/{nome_unico}"
@@ -751,6 +928,7 @@ if st.button("Ler exames"):
                     }
                 )
 
+
             except Exception as e:
 
                 st.error(
@@ -764,12 +942,16 @@ if st.button("Ler exames"):
 
             try:
 
-                supabase.table("exames").insert({
+                supabase.table(
+                    "exames"
+                ).insert({
 
                     "hospital_id": user_id,
 
                     "data_nascimento": (
-                        data_nascimento.strftime("%d/%m/%Y")
+                        data_nascimento.strftime(
+                            "%d/%m/%Y"
+                        )
                         if data_nascimento
                         else None
                     ),
@@ -809,6 +991,7 @@ if st.button("Ler exames"):
 
                     pass
 
+
                 st.error(
                     f"Erro ao salvar os dados de {arquivo.name}: {e}"
                 )
@@ -834,14 +1017,18 @@ if not df.empty:
 
     # ================= FILTROS =================
 
-    col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(3)
+    col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(
+        3
+    )
 
 
     # ================= FILTRO STATUS =================
 
     with col_filtro_status:
 
-        with st.popover("🔎 Status"):
+        with st.popover(
+            "🔎 Status"
+        ):
 
             filtro_status = st.radio(
                 "Mostrar:",
@@ -862,7 +1049,9 @@ if not df.empty:
                 key="filtro_status_input"
             )
 
+
             st.session_state.filtro_status = filtro_status
+
 
         st.caption(
             st.session_state.filtro_status
@@ -873,7 +1062,9 @@ if not df.empty:
 
     with col_filtro_paciente:
 
-        with st.popover("👤 Paciente"):
+        with st.popover(
+            "👤 Paciente"
+        ):
 
             paciente_busca = st.text_input(
                 "Buscar paciente",
@@ -882,13 +1073,16 @@ if not df.empty:
                 key="paciente_busca_input"
             )
 
+
             st.session_state.busca_paciente = paciente_busca
+
 
         if st.session_state.busca_paciente:
 
             st.caption(
                 f"Paciente: {st.session_state.busca_paciente}"
             )
+
 
         else:
 
@@ -901,7 +1095,9 @@ if not df.empty:
 
     with col_filtro_prontuario:
 
-        with st.popover("📋 Prontuário"):
+        with st.popover(
+            "📋 Prontuário"
+        ):
 
             prontuario_busca = st.text_input(
                 "Buscar prontuário",
@@ -910,13 +1106,16 @@ if not df.empty:
                 key="prontuario_busca_input"
             )
 
+
             st.session_state.busca_prontuario = prontuario_busca
+
 
         if st.session_state.busca_prontuario:
 
             st.caption(
                 f"Prontuário: {st.session_state.busca_prontuario}"
             )
+
 
         else:
 
@@ -926,7 +1125,9 @@ if not df.empty:
 
 
     filtro = st.session_state.filtro_status
+
     paciente_busca = st.session_state.busca_paciente
+
     prontuario_busca = st.session_state.busca_prontuario
 
 
@@ -941,6 +1142,7 @@ if not df.empty:
             )
         ]
 
+
     elif filtro == "🟡 Em alerta":
 
         df_tabela = df[
@@ -950,6 +1152,7 @@ if not df.empty:
             )
         ]
 
+
     elif filtro == "🟢 Válidos":
 
         df_tabela = df[
@@ -958,6 +1161,7 @@ if not df.empty:
                 na=False
             )
         ]
+
 
     else:
 
@@ -1000,26 +1204,78 @@ if not df.empty:
 
     df_tabela = df_tabela.copy()
 
+
     df_tabela["Excluir"] = df_tabela.index.isin(
         st.session_state.exclusoes_pendentes
     )
 
 
-    # ================= LINKS DOS PDFs =================
+    # ================= COLUNA COM LINK DO PDF =================
+
+    def criar_link_pdf(linha):
+
+        arquivo_path = linha.get(
+            "arquivo_path"
+        )
+
+
+        nome_exame = str(
+            linha.get(
+                "exame",
+                "EXAME"
+            )
+        )
+
+
+        if not arquivo_path:
+
+            return nome_exame
+
+
+        try:
+
+            resposta = supabase.storage.from_(
+                "exames-pdf"
+            ).create_signed_url(
+                arquivo_path,
+                3600
+            )
+
+
+            if isinstance(
+                resposta,
+                dict
+            ):
+
+                link = (
+                    resposta.get("signedURL")
+                    or resposta.get("signed_url")
+                    or resposta.get("signedUrl")
+                )
+
+
+            else:
+
+                link = None
+
+
+            if link:
+
+                return (
+                    f"{link}#{nome_exame}"
+                )
+
+
+        except Exception:
+
+            pass
+
+
+        return nome_exame
+
 
     df_tabela["exame_link"] = df_tabela.apply(
-        lambda linha: (
-            supabase.storage
-            .from_("exames-pdf")
-            .create_signed_url(
-                linha["arquivo_path"],
-                3600
-            ).get("signedURL", "")
-            + "#"
-            + str(linha["exame"])
-        )
-        if linha.get("arquivo_path")
-        else "",
+        criar_link_pdf,
         axis=1
     )
 
@@ -1045,14 +1301,17 @@ if not df.empty:
             {}
         )
 
+
         alteracoes = estado_editor.get(
             "edited_rows",
             {}
         )
 
+
         indices_visiveis = list(
             df_tabela.index
         )
+
 
         for linha, valores in alteracoes.items():
 
@@ -1060,15 +1319,22 @@ if not df.empty:
 
                 linha = int(linha)
 
+
                 if linha < 0 or linha >= len(indices_visiveis):
+
                     continue
 
-                indice_df = indices_visiveis[linha]
+
+                indice_df = indices_visiveis[
+                    linha
+                ]
+
 
                 id_exame = df.loc[
                     indice_df,
                     "id"
                 ]
+
 
                 if "Excluir" in valores:
 
@@ -1078,11 +1344,13 @@ if not df.empty:
                             id_exame
                         )
 
+
                     else:
 
                         st.session_state.exclusoes_pendentes.discard(
                             id_exame
                         )
+
 
             except Exception:
 
@@ -1092,8 +1360,11 @@ if not df.empty:
     # ================= TABELA BLOQUEADA =================
 
     tabela = st.data_editor(
+
         df_tabela[colunas],
+
         use_container_width=True,
+
         disabled=[
             "data_nascimento",
             "paciente",
@@ -1103,14 +1374,20 @@ if not df.empty:
             "data_vencimento",
             "status"
         ],
+
         column_config={
+
             "exame_link": st.column_config.LinkColumn(
                 "exame",
                 display_text=r".*#(.*)"
             )
+
         },
+
         key="editor_exames",
+
         on_change=atualizar_exclusoes
+
     )
 
 
@@ -1124,32 +1401,6 @@ if not df.empty:
 
             for id_excluir in st.session_state.exclusoes_pendentes:
 
-                # Exclui também o PDF do Storage
-                linha_exame = df[
-                    df["id"] == id_excluir
-                ]
-
-                if not linha_exame.empty:
-
-                    arquivo_path = linha_exame.iloc[0].get(
-                        "arquivo_path"
-                    )
-
-                    if arquivo_path:
-
-                        try:
-
-                            supabase.storage.from_(
-                                "exames-pdf"
-                            ).remove([
-                                arquivo_path
-                            ])
-
-                        except Exception:
-
-                            pass
-
-
                 supabase.table(
                     "exames"
                 ).delete().eq(
@@ -1157,13 +1408,17 @@ if not df.empty:
                     id_excluir
                 ).execute()
 
+
             st.session_state.exclusoes_pendentes = set()
+
 
             st.success(
                 "Alterações salvas"
             )
 
+
             st.rerun()
+
 
         except Exception as e:
 
