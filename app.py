@@ -24,7 +24,6 @@ def calcular_status(data_vencimento):
     ).date()
 
     if isinstance(data_vencimento, datetime):
-
         data_vencimento = data_vencimento.date()
 
     dias_para_vencer = (
@@ -32,23 +31,15 @@ def calcular_status(data_vencimento):
     ).days
 
     if dias_para_vencer < 0:
-
         return "🔴 VENCIDO"
 
     if dias_para_vencer <= 30:
-
         return "🟡 EM ALERTA"
 
     return "🟢 VALIDO"
 
 
 def atualizar_status_exames(user_id):
-
-    """
-    Atualiza os status de todos os exames do usuário.
-    Esta é a mesma função utilizada pelo botão manual
-    e pela atualização automática.
-    """
 
     exames_atualizados = supabase.table(
         "exames"
@@ -703,7 +694,6 @@ if st.button("Ler exames"):
 
         for arquivo in arquivos:
 
-            # Guarda os bytes do PDF antes do processamento
             arquivo_bytes = arquivo.getvalue()
 
             (
@@ -714,7 +704,6 @@ if st.button("Ler exames"):
                 prontuario
             ) = ler_pdf(arquivo)
 
-
             if not data_exame:
 
                 st.warning(
@@ -723,11 +712,9 @@ if st.button("Ler exames"):
 
                 continue
 
-
             data_vencimento = (
                 data_exame + timedelta(days=180)
             )
-
 
             status = calcular_status(
                 data_vencimento
@@ -809,9 +796,6 @@ if st.button("Ler exames"):
 
 
             except Exception as e:
-
-                # Se o registro não puder ser salvo,
-                # remove o PDF que acabou de ser enviado.
 
                 try:
 
@@ -1021,11 +1005,30 @@ if not df.empty:
     )
 
 
+    # ================= LINKS DOS PDFs =================
+
+    df_tabela["exame_link"] = df_tabela.apply(
+        lambda linha: (
+            supabase.storage
+            .from_("exames-pdf")
+            .create_signed_url(
+                linha["arquivo_path"],
+                3600
+            ).get("signedURL", "")
+            + "#"
+            + str(linha["exame"])
+        )
+        if linha.get("arquivo_path")
+        else "",
+        axis=1
+    )
+
+
     colunas = [
         "data_nascimento",
         "paciente",
         "prontuario_registro",
-        "exame",
+        "exame_link",
         "data_exame",
         "data_vencimento",
         "status",
@@ -1095,11 +1098,17 @@ if not df.empty:
             "data_nascimento",
             "paciente",
             "prontuario_registro",
-            "exame",
+            "exame_link",
             "data_exame",
             "data_vencimento",
             "status"
         ],
+        column_config={
+            "exame_link": st.column_config.LinkColumn(
+                "exame",
+                display_text=r".*#(.*)"
+            )
+        },
         key="editor_exames",
         on_change=atualizar_exclusoes
     )
@@ -1114,6 +1123,32 @@ if not df.empty:
         try:
 
             for id_excluir in st.session_state.exclusoes_pendentes:
+
+                # Exclui também o PDF do Storage
+                linha_exame = df[
+                    df["id"] == id_excluir
+                ]
+
+                if not linha_exame.empty:
+
+                    arquivo_path = linha_exame.iloc[0].get(
+                        "arquivo_path"
+                    )
+
+                    if arquivo_path:
+
+                        try:
+
+                            supabase.storage.from_(
+                                "exames-pdf"
+                            ).remove([
+                                arquivo_path
+                            ])
+
+                        except Exception:
+
+                            pass
+
 
                 supabase.table(
                     "exames"
