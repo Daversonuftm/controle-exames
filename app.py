@@ -8,7 +8,9 @@ from zoneinfo import ZoneInfo
 from supabase import create_client
 
 
-# 🔑 SUPABASE
+# ============================================================
+# SUPABASE
+# ============================================================
 
 url = "https://dpouzkapdaipnfnlsrio.supabase.co"
 
@@ -19,14 +21,15 @@ supabase = create_client(
     key
 )
 
-
 st.set_page_config(
     page_title="Controle de Exames",
     layout="wide"
 )
 
 
-# ================= FUNÇÕES DE STATUS =================
+# ============================================================
+# FUNÇÕES DE STATUS
+# ============================================================
 
 def calcular_status(data_vencimento):
 
@@ -57,8 +60,8 @@ def atualizar_status_exames(user_id):
 
     """
     Atualiza os status de todos os exames do usuário.
-    Esta é a mesma função utilizada pelo botão manual
-    e pela atualização automática.
+    Esta é a mesma função utilizada pelo botão manual,
+    pelo login e pela atualização automática.
     """
 
     exames_atualizados = supabase.table(
@@ -109,188 +112,231 @@ def atualizar_status_exames(user_id):
     return alterou
 
 
-# ================= LOGIN =================
+# ============================================================
+# FUNÇÕES PARA COMPARAÇÃO DOS EXAMES
+# ============================================================
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+def normalizar_texto_comparacao(texto):
 
+    if texto is None:
 
-if "ultima_atualizacao" not in st.session_state:
-    st.session_state.ultima_atualizacao = None
+        return ""
 
+    texto = str(texto)
 
-# ================= CONTROLE DOS FILTROS =================
+    texto = texto.upper()
 
-if "filtro_status" not in st.session_state:
-    st.session_state.filtro_status = "Todos os exames"
-
-
-if "busca_paciente" not in st.session_state:
-    st.session_state.busca_paciente = ""
-
-
-if "busca_prontuario" not in st.session_state:
-    st.session_state.busca_prontuario = ""
-
-
-st.title(
-    "Sistema de Controle de Exames"
-)
-
-
-if not st.session_state.user:
-
-    st.subheader("Login")
-
-
-    # ================= FORMULÁRIO LOGIN/CADASTRO =================
-
-    with st.form("form_login"):
-
-        email = st.text_input(
-            "Email"
-        )
-
-        senha = st.text_input(
-            "Senha",
-            type="password"
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            entrar = st.form_submit_button(
-                "Entrar"
-            )
-
-        with col2:
-
-            cadastrar = st.form_submit_button(
-                "Cadastrar"
-            )
-
-
-    # ================= ENTRAR =================
-
-    if entrar:
-
-        if not email or not senha:
-
-            st.warning(
-                "Digite o email e a senha para efetuar o login."
-            )
-
-        else:
-
-            try:
-
-                user = supabase.auth.sign_in_with_password({
-                    "email": email,
-                    "password": senha
-                })
-
-
-                # ================= ATUALIZA STATUS AO LOGAR =================
-
-                user_id_login = user.user.id
-
-                atualizar_status_exames(
-                    user_id_login
-                )
-
-
-                st.session_state.user = user
-
-                st.session_state.ultima_atualizacao = None
-
-                st.rerun()
-
-
-            except Exception as e:
-
-                st.error(
-                    f"Erro no login: {e}"
-                )
-
-
-    # ================= CADASTRAR =================
-
-    if cadastrar:
-
-        if not email or not senha:
-
-            st.warning(
-                "Digite o email e a senha para realizar o cadastro."
-            )
-
-        else:
-
-            try:
-
-                supabase.auth.sign_up({
-                    "email": email,
-                    "password": senha
-                })
-
-                st.success(
-                    "Cadastro realizado! "
-                    "Enviamos um email de confirmação para o endereço informado. "
-                    "Para efetuar o login, é necessário confirmar o email. "
-                    "Verifique também a caixa de spam."
-                )
-
-            except Exception as e:
-
-                st.error(
-                    f"Erro ao cadastrar: {e}"
-                )
-
-
-    st.stop()
-
-
-# ================= SESSÃO SUPABASE =================
-
-if st.session_state.user:
-
-    supabase.auth.set_session(
-        st.session_state.user.session.access_token,
-        st.session_state.user.session.refresh_token
+    texto = re.sub(
+        r"\s+",
+        " ",
+        texto
     )
 
+    return texto.strip()
 
-user_id = st.session_state.user.user.id
+
+def converter_data_exame(data):
+
+    if not data:
+
+        return None
+
+    if isinstance(data, datetime):
+
+        return data
+
+    if isinstance(data, str):
+
+        try:
+
+            return datetime.strptime(
+                data,
+                "%d/%m/%Y"
+            )
+
+        except Exception:
+
+            return None
+
+    return None
 
 
-# ================= FUNÇÕES =================
+def formatar_data(data):
+
+    data_convertida = converter_data_exame(
+        data
+    )
+
+    if data_convertida:
+
+        return data_convertida.strftime(
+            "%d/%m/%Y"
+        )
+
+    return str(data)
+
+
+def buscar_exames_anteriores(
+    user_id,
+    paciente,
+    tipo_exame
+):
+
+    resposta = supabase.table(
+        "exames"
+    ).select(
+        "*"
+    ).eq(
+        "hospital_id",
+        user_id
+    ).execute()
+
+    exames = resposta.data or []
+
+    paciente_comparacao = normalizar_texto_comparacao(
+        paciente
+    )
+
+    exame_comparacao = normalizar_texto_comparacao(
+        tipo_exame
+    )
+
+    encontrados = []
+
+    for exame in exames:
+
+        paciente_existente = normalizar_texto_comparacao(
+            exame.get("paciente")
+        )
+
+        exame_existente = normalizar_texto_comparacao(
+            exame.get("exame")
+        )
+
+        if (
+            paciente_existente == paciente_comparacao
+            and
+            exame_existente == exame_comparacao
+        ):
+
+            encontrados.append(
+                exame
+            )
+
+    return encontrados
+
+
+# ============================================================
+# FUNÇÃO PARA CRIAR LINK DO PDF
+# ============================================================
+
+def criar_link_pdf(linha):
+
+    arquivo_path = linha.get(
+        "arquivo_path"
+    )
+
+    nome_exame = str(
+        linha.get(
+            "exame",
+            "EXAME"
+        )
+    )
+
+    if not arquivo_path:
+
+        return nome_exame
+
+    try:
+
+        resposta = supabase.storage.from_(
+            "exames-pdf"
+        ).create_signed_url(
+            arquivo_path,
+            3600
+        )
+
+        if isinstance(
+            resposta,
+            dict
+        ):
+
+            link = (
+                resposta.get("signedURL")
+                or resposta.get("signed_url")
+                or resposta.get("signedUrl")
+            )
+
+        else:
+
+            link = getattr(
+                resposta,
+                "signed_url",
+                None
+            )
+
+            if not link:
+
+                link = getattr(
+                    resposta,
+                    "signedURL",
+                    None
+                )
+
+        if link:
+
+            return (
+                f"{link}#EXAME_{nome_exame}"
+            )
+
+    except Exception:
+
+        pass
+
+    return nome_exame
+
+
+# ============================================================
+# FUNÇÕES DE LEITURA DOS PDFS
+# ============================================================
 
 def identificar_exame(texto):
 
-    if texto.lower().count("resultado") > 5:
+    if texto.lower().count(
+        "resultado"
+    ) > 5:
 
         return "LAUDO PRÉ TRANSPLANTE"
 
-
-    linhas = texto.split("\n")
-
+    linhas = texto.split(
+        "\n"
+    )
 
     palavras_chave = [
 
         "ELETROCARDIOGRAMA",
+
         "ULTRASSONOGRAFIA",
+
         "ENDOSCOPIA",
+
         "ECOCARDIOGRAMA",
+
         "TESTE ERGOMÉTRICO",
+
         "TESTE ERGOMETRICO",
+
         "DOPPLER",
+
         "HEMODINÂMICO",
+
         "HEMODINAMICO",
+
         "CORONARIOGRAFIA",
+
         "CATETERISMO"
 
     ]
-
 
     for linha in linhas:
 
@@ -302,36 +348,48 @@ def identificar_exame(texto):
 
                 return linha_limpa.upper()
 
-
     texto = texto.lower()
 
-
-    if "endoscopia" in texto or "eda" in texto:
+    if (
+        "endoscopia" in texto
+        or
+        "eda" in texto
+    ):
 
         return "ENDOSCOPIA"
 
-
-    if "ecocardiograma" in texto or "ecocardiografia" in texto:
+    if (
+        "ecocardiograma" in texto
+        or
+        "ecocardiografia" in texto
+    ):
 
         return "ECOCARDIOGRAMA"
 
-
-    if "ultrassom" in texto or "ultrassonografia" in texto:
+    if (
+        "ultrassom" in texto
+        or
+        "ultrassonografia" in texto
+    ):
 
         return "ULTRASSOM"
 
-
-    if "pré tx" in texto or "pre tx" in texto:
+    if (
+        "pré tx" in texto
+        or
+        "pre tx" in texto
+    ):
 
         return "LAUDO PRÉ TRANSPLANTE"
-
 
     return "EXAME"
 
 
 def limpar_nome(nome):
 
-    nome = nome.split("\n")[0]
+    nome = nome.split(
+        "\n"
+    )[0]
 
     nome = re.split(
         r'Origem|Sexo|Idade|Nascimento|Dt\.|Convênio',
@@ -345,8 +403,9 @@ def ler_pdf(arquivo):
 
     texto = ""
 
-
-    with pdfplumber.open(arquivo) as pdf:
+    with pdfplumber.open(
+        arquivo
+    ) as pdf:
 
         for page in pdf.pages:
 
@@ -354,13 +413,18 @@ def ler_pdf(arquivo):
 
             if conteudo:
 
-                texto += conteudo + "\n"
+                texto += (
+                    conteudo
+                    +
+                    "\n"
+                )
 
 
-    # ================= DATA DE NASCIMENTO =================
+    # ========================================================
+    # DATA DE NASCIMENTO
+    # ========================================================
 
     data_nascimento = None
-
 
     padroes_nascimento = [
 
@@ -372,7 +436,6 @@ def ler_pdf(arquivo):
 
     ]
 
-
     for padrao in padroes_nascimento:
 
         match_nascimento = re.search(
@@ -380,7 +443,6 @@ def ler_pdf(arquivo):
             texto,
             re.IGNORECASE
         )
-
 
         if match_nascimento:
 
@@ -392,10 +454,11 @@ def ler_pdf(arquivo):
             break
 
 
-    # ================= NOME =================
+    # ========================================================
+    # NOME
+    # ========================================================
 
     nome = None
-
 
     padroes_nome = [
 
@@ -407,14 +470,12 @@ def ler_pdf(arquivo):
 
     ]
 
-
     for padrao in padroes_nome:
 
         match = re.search(
             padrao,
             texto
         )
-
 
         if match:
 
@@ -425,10 +486,11 @@ def ler_pdf(arquivo):
             break
 
 
-    # ================= DATA DO EXAME =================
+    # ========================================================
+    # DATA DO EXAME
+    # ========================================================
 
     data_exame = None
-
 
     padroes_data = [
 
@@ -442,7 +504,6 @@ def ler_pdf(arquivo):
 
     ]
 
-
     for padrao in padroes_data:
 
         match = re.search(
@@ -450,7 +511,6 @@ def ler_pdf(arquivo):
             texto,
             re.IGNORECASE
         )
-
 
         if match:
 
@@ -464,18 +524,18 @@ def ler_pdf(arquivo):
 
     if not data_exame:
 
-        for linha in texto.split("\n"):
+        for linha in texto.split(
+            "\n"
+        ):
 
             if "nasc" in linha.lower():
 
                 continue
 
-
             match = re.search(
                 r'\d{2}/\d{2}/\d{4}',
                 linha
             )
-
 
             if match:
 
@@ -487,22 +547,26 @@ def ler_pdf(arquivo):
                 break
 
 
+    # ========================================================
+    # TIPO DO EXAME
+    # ========================================================
+
     tipo_exame = identificar_exame(
         texto
     )
 
 
-    # ================= PRONTUÁRIO / REGISTRO =================
+    # ========================================================
+    # PRONTUÁRIO / REGISTRO
+    # ========================================================
 
     prontuario_registro = None
-
 
     match_prontuario = re.search(
         r'Prontu[aá]rio[:\s]*([0-9/]+)',
         texto,
         re.IGNORECASE
     )
-
 
     if match_prontuario:
 
@@ -521,138 +585,292 @@ def ler_pdf(arquivo):
             re.IGNORECASE
         )
 
-
         if match_registro:
 
-            prontuario_registro = match_registro.group(1)
-
-
-    return (
-        data_nascimento,
-        nome,
-        data_exame,
-        tipo_exame,
-        prontuario_registro
-    )
-
-
-# ================= FUNÇÕES DE SUBSTITUIÇÃO =================
-
-def normalizar_texto_comparacao(texto):
-
-    if texto is None:
-
-        return ""
-
-    texto = str(texto).strip().upper()
-
-    texto = re.sub(
-        r"\s+",
-        " ",
-        texto
-    )
-
-    return texto
-
-
-def buscar_exames_anteriores(
-    user_id,
-    paciente,
-    tipo_exame
-):
-
-    if not paciente:
-
-        return []
-
-
-    paciente_normalizado = normalizar_texto_comparacao(
-        paciente
-    )
-
-    exame_normalizado = normalizar_texto_comparacao(
-        tipo_exame
-    )
-
-
-    resposta = supabase.table(
-        "exames"
-    ).select(
-        "*"
-    ).eq(
-        "hospital_id",
-        user_id
-    ).execute()
-
-
-    encontrados = []
-
-
-    for exame in resposta.data:
-
-        paciente_existente = normalizar_texto_comparacao(
-            exame.get("paciente")
-        )
-
-        tipo_existente = normalizar_texto_comparacao(
-            exame.get("exame")
-        )
-
-
-        if (
-            paciente_existente == paciente_normalizado
-            and
-            tipo_existente == exame_normalizado
-        ):
-
-            encontrados.append(
-                exame
+            prontuario_registro = (
+                match_registro.group(1)
             )
 
 
-    return encontrados
+    return (
 
+        data_nascimento,
 
-def converter_data_exame(valor):
+        nome,
 
-    if not valor:
+        data_exame,
 
-        return None
+        tipo_exame,
 
+        prontuario_registro
 
-    if isinstance(valor, datetime):
-
-        return valor
-
-
-    try:
-
-        return datetime.strptime(
-            str(valor),
-            "%d/%m/%Y"
-        )
-
-    except Exception:
-
-        return None
-
-
-def formatar_data(valor):
-
-    data = converter_data_exame(
-        valor
     )
 
-    if data:
 
-        return data.strftime(
-            "%d/%m/%Y"
+# ============================================================
+# CONTROLE DA SESSÃO
+# ============================================================
+
+if "user" not in st.session_state:
+
+    st.session_state.user = None
+
+
+if "ultima_atualizacao" not in st.session_state:
+
+    st.session_state.ultima_atualizacao = None
+
+
+if "filtro_status" not in st.session_state:
+
+    st.session_state.filtro_status = (
+        "Todos os exames"
+    )
+
+
+if "busca_paciente" not in st.session_state:
+
+    st.session_state.busca_paciente = ""
+
+
+if "busca_prontuario" not in st.session_state:
+
+    st.session_state.busca_prontuario = ""
+
+
+# NOVO:
+# guarda as mensagens do processamento até o usuário clicar OK
+
+if "mensagens_processamento" not in st.session_state:
+
+    st.session_state.mensagens_processamento = []
+
+
+# Controle das exclusões
+
+if "exclusoes_pendentes" not in st.session_state:
+
+    st.session_state.exclusoes_pendentes = set()
+
+
+if "confirmar_exclusao" not in st.session_state:
+
+    st.session_state.confirmar_exclusao = False
+
+
+# ============================================================
+# TÍTULO
+# ============================================================
+
+st.title(
+    "Sistema de Controle de Exames"
+)
+
+
+# ============================================================
+# LOGIN
+# ============================================================
+
+if not st.session_state.user:
+
+    st.subheader(
+        "Login"
+    )
+
+    with st.form(
+        "form_login"
+    ):
+
+        email = st.text_input(
+            "Email"
         )
 
-    return str(valor)
+        senha = st.text_input(
+            "Senha",
+            type="password"
+        )
+
+        col1, col2 = st.columns(
+            2
+        )
+
+        with col1:
+
+            entrar = st.form_submit_button(
+                "Entrar"
+            )
+
+        with col2:
+
+            cadastrar = st.form_submit_button(
+                "Cadastrar"
+            )
 
 
-# ================= BANCO =================
+    # ========================================================
+    # ENTRAR
+    # ========================================================
+
+    if entrar:
+
+        if not email or not senha:
+
+            st.warning(
+                "Digite o email e a senha para efetuar o login."
+            )
+
+        else:
+
+            try:
+
+                user = (
+                    supabase.auth.sign_in_with_password(
+                        {
+                            "email": email,
+                            "password": senha
+                        }
+                    )
+                )
+
+                # Atualiza os status no momento do login
+                user_id_login = user.user.id
+
+                atualizar_status_exames(
+                    user_id_login
+                )
+
+                st.session_state.user = user
+
+                st.session_state.ultima_atualizacao = None
+
+                st.session_state.exclusoes_pendentes = set()
+
+                st.session_state.confirmar_exclusao = False
+
+                st.session_state.mensagens_processamento = []
+
+                st.rerun()
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro no login: {e}"
+                )
+
+
+    # ========================================================
+    # CADASTRAR
+    # ========================================================
+
+    if cadastrar:
+
+        if not email or not senha:
+
+            st.warning(
+                "Digite o email e a senha para realizar o cadastro."
+            )
+
+        else:
+
+            try:
+
+                supabase.auth.sign_up(
+                    {
+                        "email": email,
+                        "password": senha
+                    }
+                )
+
+                st.success(
+                    "Cadastro realizado! "
+                    "Enviamos um email de confirmação para o endereço informado. "
+                    "Para efetuar o login, é necessário confirmar o email. "
+                    "Verifique também a caixa de spam."
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro ao cadastrar: {e}"
+                )
+
+    st.stop()
+
+
+# ============================================================
+# SESSÃO SUPABASE
+# ============================================================
+
+if st.session_state.user:
+
+    supabase.auth.set_session(
+
+        st.session_state.user.session.access_token,
+
+        st.session_state.user.session.refresh_token
+
+    )
+
+
+user_id = st.session_state.user.user.id
+
+
+# ============================================================
+# CAIXA DE RESULTADO DO PROCESSAMENTO
+# ============================================================
+
+if st.session_state.mensagens_processamento:
+
+    with st.container(
+        border=True
+    ):
+
+        st.subheader(
+            "Resultado do processamento"
+        )
+
+        for tipo_mensagem, mensagem in (
+            st.session_state.mensagens_processamento
+        ):
+
+            if tipo_mensagem == "success":
+
+                st.success(
+                    mensagem
+                )
+
+            elif tipo_mensagem == "info":
+
+                st.info(
+                    mensagem
+                )
+
+            elif tipo_mensagem == "warning":
+
+                st.warning(
+                    mensagem
+                )
+
+            elif tipo_mensagem == "error":
+
+                st.error(
+                    mensagem
+                )
+
+
+        if st.button(
+            "OK, entendi",
+            key="ok_resultado_processamento"
+        ):
+
+            st.session_state.mensagens_processamento = []
+
+            st.rerun()
+
+
+# ============================================================
+# BANCO
+# ============================================================
 
 res = supabase.table(
     "exames"
@@ -663,13 +881,14 @@ res = supabase.table(
     user_id
 ).execute()
 
-
 df = pd.DataFrame(
     res.data
 )
 
 
-# ================= ATUALIZAÇÃO AUTOMÁTICA INICIAL =================
+# ============================================================
+# ATUALIZAÇÃO INICIAL DOS STATUS
+# ============================================================
 
 if not df.empty:
 
@@ -682,41 +901,40 @@ if not df.empty:
                 "%d/%m/%Y"
             )
 
-
             novo_status = calcular_status(
                 data_vencimento
             )
-
 
             status_atual = exame.get(
                 "status"
             )
 
-
             if status_atual != novo_status:
 
                 supabase.table(
                     "exames"
-                ).update({
-                    "status": novo_status
-                }).eq(
+                ).update(
+                    {
+                        "status": novo_status
+                    }
+                ).eq(
                     "id",
                     exame["id"]
                 ).execute()
-
 
                 df.loc[
                     index,
                     "status"
                 ] = novo_status
 
-
         except Exception:
 
             pass
 
 
-# ================= DASHBOARD =================
+# ============================================================
+# DASHBOARD
+# ============================================================
 
 if not df.empty:
 
@@ -729,7 +947,6 @@ if not df.empty:
         ]
     )
 
-
     alerta = len(
         df[
             df["status"].str.contains(
@@ -738,7 +955,6 @@ if not df.empty:
             )
         ]
     )
-
 
     validos = len(
         df[
@@ -749,7 +965,6 @@ if not df.empty:
         ]
     )
 
-
 else:
 
     vencidos = 0
@@ -759,7 +974,9 @@ else:
     validos = 0
 
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3 = st.columns(
+    3
+)
 
 
 c1.metric(
@@ -780,9 +997,13 @@ c3.metric(
 )
 
 
-# ================= ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA =================
+# ============================================================
+# ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA
+# ============================================================
 
-@st.fragment(run_every="1h")
+@st.fragment(
+    run_every="1h"
+)
 def verificacao_automatica_status():
 
     try:
@@ -791,13 +1012,11 @@ def verificacao_automatica_status():
             user_id
         )
 
-
         if houve_alteracao:
 
             st.rerun(
                 scope="app"
             )
-
 
     except Exception:
 
@@ -807,7 +1026,9 @@ def verificacao_automatica_status():
 verificacao_automatica_status()
 
 
-# ================= ATUALIZAR STATUS + SAIR =================
+# ============================================================
+# ATUALIZAR STATUS + SAIR
+# ============================================================
 
 col_atualizar, col_espaco, col_sair = st.columns(
     [1, 5, 1]
@@ -826,14 +1047,15 @@ with col_atualizar:
                 user_id
             )
 
-
-            st.session_state.ultima_atualizacao = datetime.now(
-                ZoneInfo("America/Sao_Paulo")
+            st.session_state.ultima_atualizacao = (
+                datetime.now(
+                    ZoneInfo(
+                        "America/Sao_Paulo"
+                    )
+                )
             )
 
-
             st.rerun()
-
 
         except Exception as e:
 
@@ -864,10 +1086,13 @@ with col_sair:
 
             pass
 
-
         st.session_state.user = None
 
-        st.session_state.ultima_atualizacao = None
+        st.session_state.exclusoes_pendentes = set()
+
+        st.session_state.confirmar_exclusao = False
+
+        st.session_state.mensagens_processamento = []
 
         st.rerun()
 
@@ -875,7 +1100,9 @@ with col_sair:
 st.divider()
 
 
-# ================= UPLOAD =================
+# ============================================================
+# UPLOAD
+# ============================================================
 
 arquivos = st.file_uploader(
     "Selecionar PDFs",
@@ -888,65 +1115,86 @@ if st.button(
     "Ler exames"
 ):
 
+    mensagens = []
+
     if not arquivos:
 
-        st.warning(
-            "Selecione PDFs"
+        mensagens.append(
+            (
+                "warning",
+                "Selecione PDFs."
+            )
         )
-
 
     else:
 
-        mensagens = []
-
-
         for arquivo in arquivos:
 
-            arquivo_bytes = arquivo.getvalue()
+            # =================================================
+            # LER PDF
+            # =================================================
+
+            try:
+
+                arquivo_bytes = arquivo.getvalue()
+
+                (
+                    data_nascimento,
+                    nome,
+                    data_exame,
+                    tipo_exame,
+                    prontuario
+                ) = ler_pdf(
+                    arquivo
+                )
+
+            except Exception as e:
+
+                mensagens.append(
+                    (
+                        "error",
+                        f"Erro ao ler o PDF {arquivo.name}: {e}"
+                    )
+                )
+
+                continue
 
 
-            (
-                data_nascimento,
-                nome,
-                data_exame,
-                tipo_exame,
-                prontuario
-            ) = ler_pdf(
-                arquivo
-            )
-
+            # =================================================
+            # VALIDAR DATA
+            # =================================================
 
             if not data_exame:
 
-                st.warning(
-                    f"Data não encontrada em {arquivo.name}"
+                mensagens.append(
+                    (
+                        "warning",
+                        f"Data não encontrada em {arquivo.name}."
+                    )
                 )
 
                 continue
 
+
+            # =================================================
+            # VALIDAR NOME
+            # =================================================
 
             if not nome:
 
-                st.warning(
-                    f"Paciente não identificado em {arquivo.name}"
+                mensagens.append(
+                    (
+                        "warning",
+                        f"Nome do paciente não encontrado em {arquivo.name}."
+                    )
                 )
 
                 continue
 
 
-            data_vencimento = (
-                data_exame + timedelta(
-                    days=180
-                )
-            )
-
-
-            status = calcular_status(
-                data_vencimento
-            )
-
-
-            # ================= VERIFICAR EXAME ANTERIOR =================
+            # =================================================
+            # BUSCAR EXAMES EXISTENTES
+            # =================================================
 
             exames_anteriores = buscar_exames_anteriores(
                 user_id,
@@ -955,44 +1203,46 @@ if st.button(
             )
 
 
-            exame_anterior_mais_recente = None
+            data_novo_exame = converter_data_exame(
+                data_exame
+            )
 
 
-            data_anterior_mais_recente = None
+            # =================================================
+            # VERIFICAR SE JÁ EXISTE EXAME IGUAL/MAIS NOVO
+            # =================================================
 
+            exame_mais_recente = None
 
-            for exame_anterior in exames_anteriores:
+            data_mais_recente = None
+
+            for exame_existente in exames_anteriores:
 
                 data_existente = converter_data_exame(
-                    exame_anterior.get("data_exame")
+                    exame_existente.get(
+                        "data_exame"
+                    )
                 )
 
+                if not data_existente:
 
-                if data_existente:
+                    continue
 
-                    if (
-                        data_anterior_mais_recente is None
-                        or
-                        data_existente > data_anterior_mais_recente
-                    ):
+                if (
+                    data_mais_recente is None
+                    or
+                    data_existente > data_mais_recente
+                ):
 
-                        data_anterior_mais_recente = (
-                            data_existente
-                        )
+                    data_mais_recente = data_existente
 
-                        exame_anterior_mais_recente = (
-                            exame_anterior
-                        )
+                    exame_mais_recente = exame_existente
 
-
-            # ================= VERIFICAR SE O NOVO É MAIS ANTIGO =================
 
             if (
-                exame_anterior_mais_recente
+                exame_mais_recente is not None
                 and
-                data_anterior_mais_recente
-                and
-                data_exame <= data_anterior_mais_recente
+                data_novo_exame <= data_mais_recente
             ):
 
                 mensagens.append(
@@ -1001,14 +1251,33 @@ if st.button(
                         f"ℹ️ O exame {tipo_exame} do paciente "
                         f"{nome} não foi cadastrado, pois já existe "
                         f"um exame mais recente ou com a mesma data "
-                        f"({data_anterior_mais_recente.strftime('%d/%m/%Y')})."
+                        f"({formatar_data(data_mais_recente)})."
                     )
                 )
 
                 continue
 
 
-            # ================= ARQUIVO PDF =================
+            # =================================================
+            # CALCULAR VALIDADE
+            # =================================================
+
+            data_vencimento = (
+                data_exame
+                +
+                timedelta(
+                    days=180
+                )
+            )
+
+            status = calcular_status(
+                data_vencimento
+            )
+
+
+            # =================================================
+            # CRIAR CAMINHO DO PDF
+            # =================================================
 
             nome_arquivo = re.sub(
                 r"[^A-Za-z0-9._-]",
@@ -1016,16 +1285,18 @@ if st.button(
                 arquivo.name
             )
 
-
             nome_unico = (
                 f"{uuid.uuid4().hex}_{nome_arquivo}"
             )
-
 
             arquivo_path = (
                 f"{user_id}/{nome_unico}"
             )
 
+
+            # =================================================
+            # UPLOAD DO PDF
+            # =================================================
 
             try:
 
@@ -1040,187 +1311,199 @@ if st.button(
                     }
                 )
 
-
             except Exception as e:
 
-                st.error(
-                    f"Erro ao armazenar o PDF {arquivo.name}: {e}"
+                mensagens.append(
+                    (
+                        "error",
+                        f"Erro ao armazenar o PDF "
+                        f"{arquivo.name}: {e}"
+                    )
                 )
 
                 continue
 
 
-            # ================= SALVAR NOVO EXAME =================
+            # =================================================
+            # SALVAR NOVO EXAME NO BANCO
+            # =================================================
 
             try:
 
                 supabase.table(
                     "exames"
-                ).insert({
+                ).insert(
 
-                    "hospital_id": user_id,
+                    {
 
-                    "data_nascimento": (
-                        data_nascimento.strftime(
-                            "%d/%m/%Y"
-                        )
-                        if data_nascimento
-                        else None
-                    ),
+                        "hospital_id": user_id,
 
-                    "paciente": nome,
+                        "data_nascimento": (
+                            data_nascimento.strftime(
+                                "%d/%m/%Y"
+                            )
+                            if data_nascimento
+                            else None
+                        ),
 
-                    "prontuario_registro": prontuario,
+                        "paciente": nome,
 
-                    "exame": tipo_exame,
+                        "prontuario_registro": prontuario,
 
-                    "data_exame": data_exame.strftime(
-                        "%d/%m/%Y"
-                    ),
+                        "exame": tipo_exame,
 
-                    "data_vencimento": data_vencimento.strftime(
-                        "%d/%m/%Y"
-                    ),
+                        "data_exame": (
+                            data_exame.strftime(
+                                "%d/%m/%Y"
+                            )
+                        ),
 
-                    "status": status,
+                        "data_vencimento": (
+                            data_vencimento.strftime(
+                                "%d/%m/%Y"
+                            )
+                        ),
 
-                    "arquivo_path": arquivo_path
+                        "status": status,
 
-                }).execute()
+                        "arquivo_path": arquivo_path
 
+                    }
+
+                ).execute()
 
             except Exception as e:
+
+                # Se o banco falhar,
+                # remove o PDF que acabou de ser enviado.
 
                 try:
 
                     supabase.storage.from_(
                         "exames-pdf"
-                    ).remove([
-                        arquivo_path
-                    ])
+                    ).remove(
+                        [
+                            arquivo_path
+                        ]
+                    )
 
                 except Exception:
 
                     pass
 
-
-                st.error(
-                    f"Erro ao salvar os dados de {arquivo.name}: {e}"
+                mensagens.append(
+                    (
+                        "error",
+                        f"Erro ao salvar os dados de "
+                        f"{arquivo.name}: {e}"
+                    )
                 )
 
                 continue
 
 
-            # ================= REMOVER EXAMES ANTIGOS =================
+            # =================================================
+            # NOVO EXAME MAIS RECENTE:
+            # EXCLUIR OS EXAMES ANTIGOS
+            # =================================================
 
-            if exames_anteriores:
+            exames_substituidos = []
 
-                quantidade_substituida = 0
+            for exame_existente in exames_anteriores:
 
+                data_existente = converter_data_exame(
+                    exame_existente.get(
+                        "data_exame"
+                    )
+                )
 
-                for exame_anterior in exames_anteriores:
+                if not data_existente:
 
-                    data_existente = converter_data_exame(
-                        exame_anterior.get("data_exame")
+                    continue
+
+                if data_existente < data_novo_exame:
+
+                    id_antigo = exame_existente.get(
+                        "id"
                     )
 
+                    arquivo_antigo = exame_existente.get(
+                        "arquivo_path"
+                    )
 
-                    if (
-                        data_existente
-                        and
-                        data_existente < data_exame
-                    ):
+                    # Primeiro remove da tabela do banco
 
-                        id_antigo = exame_anterior.get(
-                            "id"
-                        )
+                    try:
+
+                        supabase.table(
+                            "exames"
+                        ).delete().eq(
+                            "id",
+                            id_antigo
+                        ).execute()
+
+                    except Exception:
+
+                        continue
 
 
-                        caminho_antigo = exame_anterior.get(
-                            "arquivo_path"
-                        )
+                    # Depois remove o PDF antigo do Storage
 
+                    if arquivo_antigo:
 
                         try:
 
-                            supabase.table(
-                                "exames"
-                            ).delete().eq(
-                                "id",
-                                id_antigo
-                            ).execute()
-
-
-                            quantidade_substituida += 1
-
-
-                        except Exception as e:
-
-                            st.warning(
-                                f"O novo exame foi cadastrado, "
-                                f"mas não foi possível remover "
-                                f"um registro anterior: {e}"
+                            supabase.storage.from_(
+                                "exames-pdf"
+                            ).remove(
+                                [
+                                    arquivo_antigo
+                                ]
                             )
 
-                            continue
+                        except Exception:
 
+                            pass
 
-                        if caminho_antigo:
-
-                            try:
-
-                                supabase.storage.from_(
-                                    "exames-pdf"
-                                ).remove([
-                                    caminho_antigo
-                                ])
-
-                            except Exception:
-
-                                pass
-
-
-                if quantidade_substituida > 0:
-
-                    if quantidade_substituida == 1:
-
-                        data_antiga = (
-                            exame_anterior_mais_recente
-                            .get("data_exame")
-                        )
-
-
-                        mensagens.append(
-                            (
-                                "success",
-                                f"🔄 O exame {tipo_exame} do paciente "
-                                f"{nome} foi atualizado. O exame anterior, "
-                                f"realizado em {formatar_data(data_antiga)}, "
-                                f"foi substituído."
-                            )
-                        )
-
-                    else:
-
-                        mensagens.append(
-                            (
-                                "success",
-                                f"🔄 O exame {tipo_exame} do paciente "
-                                f"{nome} foi atualizado e os exames "
-                                f"anteriores foram substituídos pelo "
-                                f"exame mais recente."
-                            )
-                        )
-
-                else:
-
-                    mensagens.append(
-                        (
-                            "success",
-                            f"➕ O exame {tipo_exame} do paciente "
-                            f"{nome} foi cadastrado com sucesso."
-                        )
+                    exames_substituidos.append(
+                        exame_existente
                     )
+
+
+            # =================================================
+            # MENSAGEM DO RESULTADO
+            # =================================================
+
+            if exames_substituidos:
+
+                exame_antigo_mais_recente = max(
+                    exames_substituidos,
+                    key=lambda x: (
+                        converter_data_exame(
+                            x.get(
+                                "data_exame"
+                            )
+                        )
+                        or datetime.min
+                    )
+                )
+
+                data_antiga = converter_data_exame(
+                    exame_antigo_mais_recente.get(
+                        "data_exame"
+                    )
+                )
+
+                mensagens.append(
+                    (
+                        "success",
+                        f"🔄 O exame {tipo_exame} do paciente "
+                        f"{nome} foi atualizado. "
+                        f"O exame anterior, realizado em "
+                        f"{formatar_data(data_antiga)}, "
+                        f"foi substituído."
+                    )
+                )
 
             else:
 
@@ -1233,29 +1516,18 @@ if st.button(
                 )
 
 
-        # ================= MOSTRAR RESULTADOS =================
+        # =====================================================
+        # GUARDAR MENSAGENS PARA APARECEREM APÓS O RERUN
+        # =====================================================
 
-        if mensagens:
+    st.session_state.mensagens_processamento = mensagens
 
-            for tipo_mensagem, mensagem in mensagens:
-
-                if tipo_mensagem == "success":
-
-                    st.success(
-                        mensagem
-                    )
-
-                elif tipo_mensagem == "info":
-
-                    st.info(
-                        mensagem
-                    )
+    st.rerun()
 
 
-        st.rerun()
-
-
-# ================= TABELA =================
+# ============================================================
+# TABELA
+# ============================================================
 
 st.subheader(
     "Tabela de exames"
@@ -1264,14 +1536,18 @@ st.subheader(
 
 if not df.empty:
 
-    # ================= FILTROS =================
+    # ========================================================
+    # FILTROS
+    # ========================================================
 
     col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(
         3
     )
 
 
-    # ================= FILTRO STATUS =================
+    # ========================================================
+    # FILTRO STATUS
+    # ========================================================
 
     with col_filtro_status:
 
@@ -1280,13 +1556,16 @@ if not df.empty:
         ):
 
             filtro_status = st.radio(
+
                 "Mostrar:",
+
                 [
                     "Todos os exames",
                     "🔴 Vencidos",
                     "🟡 Em alerta",
                     "🟢 Válidos"
                 ],
+
                 index=[
                     "Todos os exames",
                     "🔴 Vencidos",
@@ -1295,11 +1574,14 @@ if not df.empty:
                 ].index(
                     st.session_state.filtro_status
                 ),
+
                 key="filtro_status_input"
+
             )
 
-
-            st.session_state.filtro_status = filtro_status
+            st.session_state.filtro_status = (
+                filtro_status
+            )
 
 
         st.caption(
@@ -1307,7 +1589,9 @@ if not df.empty:
         )
 
 
-    # ================= FILTRO PACIENTE =================
+    # ========================================================
+    # FILTRO PACIENTE
+    # ========================================================
 
     with col_filtro_paciente:
 
@@ -1316,22 +1600,28 @@ if not df.empty:
         ):
 
             paciente_busca = st.text_input(
+
                 "Buscar paciente",
+
                 value=st.session_state.busca_paciente,
+
                 placeholder="Digite o nome",
+
                 key="paciente_busca_input"
+
             )
 
-
-            st.session_state.busca_paciente = paciente_busca
+            st.session_state.busca_paciente = (
+                paciente_busca
+            )
 
 
         if st.session_state.busca_paciente:
 
             st.caption(
-                f"Paciente: {st.session_state.busca_paciente}"
+                f"Paciente: "
+                f"{st.session_state.busca_paciente}"
             )
-
 
         else:
 
@@ -1340,7 +1630,9 @@ if not df.empty:
             )
 
 
-    # ================= FILTRO PRONTUÁRIO =================
+    # ========================================================
+    # FILTRO PRONTUÁRIO
+    # ========================================================
 
     with col_filtro_prontuario:
 
@@ -1349,22 +1641,28 @@ if not df.empty:
         ):
 
             prontuario_busca = st.text_input(
+
                 "Buscar prontuário",
+
                 value=st.session_state.busca_prontuario,
+
                 placeholder="Digite o número",
+
                 key="prontuario_busca_input"
+
             )
 
-
-            st.session_state.busca_prontuario = prontuario_busca
+            st.session_state.busca_prontuario = (
+                prontuario_busca
+            )
 
 
         if st.session_state.busca_prontuario:
 
             st.caption(
-                f"Prontuário: {st.session_state.busca_prontuario}"
+                f"Prontuário: "
+                f"{st.session_state.busca_prontuario}"
             )
-
 
         else:
 
@@ -1373,14 +1671,22 @@ if not df.empty:
             )
 
 
-    filtro = st.session_state.filtro_status
+    filtro = (
+        st.session_state.filtro_status
+    )
 
-    paciente_busca = st.session_state.busca_paciente
+    paciente_busca = (
+        st.session_state.busca_paciente
+    )
 
-    prontuario_busca = st.session_state.busca_prontuario
+    prontuario_busca = (
+        st.session_state.busca_prontuario
+    )
 
 
-    # ================= FILTRO POR STATUS =================
+    # ========================================================
+    # FILTRO POR STATUS
+    # ========================================================
 
     if filtro == "🔴 Vencidos":
 
@@ -1391,7 +1697,6 @@ if not df.empty:
             )
         ]
 
-
     elif filtro == "🟡 Em alerta":
 
         df_tabela = df[
@@ -1400,7 +1705,6 @@ if not df.empty:
                 na=False
             )
         ]
-
 
     elif filtro == "🟢 Válidos":
 
@@ -1411,13 +1715,14 @@ if not df.empty:
             )
         ]
 
-
     else:
 
         df_tabela = df
 
 
-    # ================= FILTRO POR PACIENTE =================
+    # ========================================================
+    # FILTRO PACIENTE
+    # ========================================================
 
     if paciente_busca:
 
@@ -1426,106 +1731,54 @@ if not df.empty:
             .fillna("")
             .astype(str)
             .str.contains(
-                re.escape(paciente_busca),
+                re.escape(
+                    paciente_busca
+                ),
                 case=False,
                 na=False
             )
         ]
 
 
-    # ================= FILTRO POR PRONTUÁRIO =================
+    # ========================================================
+    # FILTRO PRONTUÁRIO
+    # ========================================================
 
     if prontuario_busca:
 
         df_tabela = df_tabela[
-            df_tabela["prontuario_registro"]
+            df_tabela[
+                "prontuario_registro"
+            ]
             .fillna("")
             .astype(str)
             .str.contains(
-                re.escape(prontuario_busca),
+                re.escape(
+                    prontuario_busca
+                ),
                 case=False,
                 na=False
             )
         ]
 
 
-    # ================= COLUNA COM LINK DO PDF =================
+    # ========================================================
+    # PREPARAR TABELA
+    # ========================================================
 
     df_tabela = df_tabela.copy()
 
 
-    def criar_link_pdf(linha):
-
-        arquivo_path = linha.get(
-            "arquivo_path"
+    df_tabela["Excluir"] = (
+        df_tabela.index.isin(
+            st.session_state.exclusoes_pendentes
         )
+    )
 
 
-        nome_exame = str(
-            linha.get(
-                "exame",
-                "EXAME"
-            )
-        )
-
-
-        if not arquivo_path:
-
-            return nome_exame
-
-
-        try:
-
-            resposta = supabase.storage.from_(
-                "exames-pdf"
-            ).create_signed_url(
-                arquivo_path,
-                3600
-            )
-
-
-            if isinstance(
-                resposta,
-                dict
-            ):
-
-                link = (
-                    resposta.get("signedURL")
-                    or resposta.get("signed_url")
-                    or resposta.get("signedUrl")
-                )
-
-
-            else:
-
-                link = getattr(
-                    resposta,
-                    "signed_url",
-                    None
-                )
-
-
-                if not link:
-
-                    link = getattr(
-                        resposta,
-                        "signedURL",
-                        None
-                    )
-
-
-            if link:
-
-                return f"{link}#EXAME_{nome_exame}"
-
-
-        except Exception:
-
-            pass
-
-
-        return nome_exame
-
+    # ========================================================
+    # LINK DO EXAME
+    # ========================================================
 
     df_tabela["exame_link"] = df_tabela.apply(
         criar_link_pdf,
@@ -1534,17 +1787,99 @@ if not df.empty:
 
 
     colunas = [
+
         "data_nascimento",
+
         "paciente",
+
         "prontuario_registro",
+
         "exame_link",
+
         "data_exame",
+
         "data_vencimento",
-        "status"
+
+        "status",
+
+        "Excluir"
+
     ]
 
 
-    # ================= TABELA BLOQUEADA =================
+    # ========================================================
+    # CONTROLAR EXCLUSÕES
+    # ========================================================
+
+    def atualizar_exclusoes():
+
+        estado_editor = st.session_state.get(
+            "editor_exames",
+            {}
+        )
+
+        alteracoes = estado_editor.get(
+            "edited_rows",
+            {}
+        )
+
+        indices_visiveis = list(
+            df_tabela.index
+        )
+
+        for linha, valores in (
+            alteracoes.items()
+        ):
+
+            try:
+
+                linha = int(
+                    linha
+                )
+
+                if (
+                    linha < 0
+                    or
+                    linha >= len(
+                        indices_visiveis
+                    )
+                ):
+
+                    continue
+
+                indice_df = (
+                    indices_visiveis[
+                        linha
+                    ]
+                )
+
+                id_exame = df.loc[
+                    indice_df,
+                    "id"
+                ]
+
+                if "Excluir" in valores:
+
+                    if valores["Excluir"]:
+
+                        st.session_state.exclusoes_pendentes.add(
+                            id_exame
+                        )
+
+                    else:
+
+                        st.session_state.exclusoes_pendentes.discard(
+                            id_exame
+                        )
+
+            except Exception:
+
+                pass
+
+
+    # ========================================================
+    # TABELA
+    # ========================================================
 
     tabela = st.data_editor(
 
@@ -1552,28 +1887,190 @@ if not df.empty:
 
         use_container_width=True,
 
+        hide_index=True,
+
         disabled=[
+
             "data_nascimento",
+
             "paciente",
+
             "prontuario_registro",
+
             "exame_link",
+
             "data_exame",
+
             "data_vencimento",
+
             "status"
+
         ],
 
         column_config={
 
             "exame_link": st.column_config.LinkColumn(
+
                 "exame",
+
                 display_text=r".*#EXAME_(.*)"
+
             )
 
         },
 
-        hide_index=True
+        key="editor_exames",
+
+        on_change=atualizar_exclusoes
 
     )
+
+
+    # ========================================================
+    # BOTÃO EXCLUIR
+    # ========================================================
+
+    if st.session_state.exclusoes_pendentes:
+
+        if st.button(
+            "Excluir selecionados"
+        ):
+
+            st.session_state.confirmar_exclusao = True
+
+            st.rerun()
+
+
+    # ========================================================
+    # CONFIRMAÇÃO DA EXCLUSÃO
+    # ========================================================
+
+    if st.session_state.confirmar_exclusao:
+
+        with st.container(
+            border=True
+        ):
+
+            st.warning(
+                "⚠️ Tem certeza que deseja excluir "
+                "os exames selecionados? "
+                "O registro será removido do sistema "
+                "e o PDF correspondente também será excluído."
+            )
+
+            col_cancelar, col_confirmar = st.columns(
+                2
+            )
+
+
+            with col_cancelar:
+
+                if st.button(
+                    "Cancelar",
+                    key="cancelar_exclusao"
+                ):
+
+                    st.session_state.confirmar_exclusao = False
+
+                    st.session_state.exclusoes_pendentes = set()
+
+                    st.rerun()
+
+
+            with col_confirmar:
+
+                if st.button(
+                    "Confirmar exclusão",
+                    key="confirmar_exclusao"
+                ):
+
+                    erros = []
+
+                    for id_excluir in (
+                        st.session_state.exclusoes_pendentes
+                    ):
+
+                        try:
+
+                            exame_excluir = df[
+                                df["id"] == id_excluir
+                            ]
+
+                            arquivo_path = None
+
+                            if not exame_excluir.empty:
+
+                                arquivo_path = (
+                                    exame_excluir.iloc[0].get(
+                                        "arquivo_path"
+                                    )
+                                )
+
+
+                            # Primeiro exclui do banco
+
+                            supabase.table(
+                                "exames"
+                            ).delete().eq(
+                                "id",
+                                id_excluir
+                            ).execute()
+
+
+                            # Depois exclui o PDF
+
+                            if arquivo_path:
+
+                                try:
+
+                                    supabase.storage.from_(
+                                        "exames-pdf"
+                                    ).remove(
+                                        [
+                                            arquivo_path
+                                        ]
+                                    )
+
+                                except Exception:
+
+                                    pass
+
+                        except Exception as e:
+
+                            erros.append(
+                                str(e)
+                            )
+
+
+                    st.session_state.exclusoes_pendentes = set()
+
+                    st.session_state.confirmar_exclusao = False
+
+
+                    if erros:
+
+                        st.session_state.mensagens_processamento = [
+
+                            (
+                                "error",
+                                "Erro ao excluir um ou mais exames."
+                            )
+
+                        ]
+
+                    else:
+
+                        st.session_state.mensagens_processamento = [
+
+                            (
+                                "success",
+                                "Os exames selecionados foram excluídos com sucesso."
+                            )
+
+                        ]
+
+
+                    st.rerun()
 
 
 else:
