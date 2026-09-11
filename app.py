@@ -1272,7 +1272,7 @@ if not df.empty:
 
             if link:
 
-                return link
+                return f"{link}#EXAME_{nome_exame}"
 
 
         except Exception:
@@ -1280,7 +1280,7 @@ if not df.empty:
             pass
 
 
-        return ""
+        return nome_exame
 
 
     df_tabela["exame_link"] = df_tabela.apply(
@@ -1388,7 +1388,7 @@ if not df.empty:
 
             "exame_link": st.column_config.LinkColumn(
                 "exame",
-                display_text="Abrir PDF"
+                display_text=r".*#EXAME_(.*)"
             )
 
         },
