@@ -513,161 +513,12 @@ if "exclusoes_pendentes" not in st.session_state:
 if "confirmar_exclusao" not in st.session_state:
     st.session_state.confirmar_exclusao = False
 
-if "confirmar_atualizacao" not in st.session_state:
-    st.session_state.confirmar_atualizacao = False
-
-if "origem_confirmacao_atualizacao" not in st.session_state:
-    st.session_state.origem_confirmacao_atualizacao = "manual"
-
-if "confirmar_saida" not in st.session_state:
-    st.session_state.confirmar_saida = False
-
-if "auto_atualizacao_bloqueada_ate" not in st.session_state:
-    st.session_state.auto_atualizacao_bloqueada_ate = None
-
 
 st.title("Sistema de Controle de Exames")
 
 
 if st.session_state.modal_mensagem:
     mostrar_modal_mensagem()
-    st.stop()
-
-
-if st.session_state.confirmar_atualizacao:
-
-    @st.dialog("Alterações não salvas", dismissible=False)
-    def mostrar_confirmacao_atualizacao():
-        quantidade = len(
-            st.session_state.exclusoes_pendentes
-        )
-
-        if quantidade == 1:
-            texto_quantidade = "Há 1 exame selecionado para exclusão."
-        else:
-            texto_quantidade = (
-                f"Há {quantidade} exames selecionados para exclusão."
-            )
-
-        st.write(texto_quantidade)
-        st.write(
-            "Essa alteração ainda não foi salva. "
-            "Se os status forem atualizados agora, a seleção será perdida."
-        )
-        st.write("Deseja atualizar os status mesmo assim?")
-
-        st.divider()
-
-        col_cancelar, col_confirmar = st.columns(2)
-
-        with col_cancelar:
-            if st.button(
-                "Cancelar",
-                key="cancelar_atualizacao",
-                use_container_width=True
-            ):
-                st.session_state.confirmar_atualizacao = False
-                st.rerun()
-
-        with col_confirmar:
-            if st.button(
-                "Atualizar",
-                key="botao_confirmar_atualizacao",
-                use_container_width=True
-            ):
-                try:
-                    atualizar_status_exames(user_id)
-
-                    st.session_state.ultima_atualizacao = datetime.now(
-                        ZoneInfo("America/Sao_Paulo")
-                    )
-                    st.session_state.confirmar_atualizacao = False
-                    st.session_state.auto_atualizacao_bloqueada_ate = (
-                        datetime.now(ZoneInfo("America/Sao_Paulo"))
-                        + timedelta(hours=1)
-                    )
-                    st.rerun()
-
-                except Exception as e:
-                    st.session_state.confirmar_atualizacao = False
-
-                    if eh_timeout_ou_erro_conexao(e):
-                        abrir_modal(
-                            "Houve uma demora na comunicação com o servidor. "
-                            "Tente novamente em alguns segundos.",
-                            "Não foi possível atualizar",
-                            "error"
-                        )
-                    else:
-                        abrir_modal(
-                            f"Erro ao atualizar os status: {e}",
-                            "Erro",
-                            "error"
-                        )
-
-                    st.rerun()
-
-    mostrar_confirmacao_atualizacao()
-    st.stop()
-
-
-if st.session_state.confirmar_saida:
-
-    @st.dialog("Alterações não salvas", dismissible=False)
-    def mostrar_confirmacao_saida():
-        quantidade = len(
-            st.session_state.exclusoes_pendentes
-        )
-
-        if quantidade == 1:
-            texto_quantidade = "Há 1 exame selecionado para exclusão."
-        else:
-            texto_quantidade = (
-                f"Há {quantidade} exames selecionados para exclusão."
-            )
-
-        st.write(texto_quantidade)
-        st.write(
-            "Essa alteração ainda não foi salva. "
-            "Se você sair agora, a seleção será perdida."
-        )
-        st.write("Deseja sair mesmo assim?")
-
-        st.divider()
-
-        col_continuar, col_sair = st.columns(2)
-
-        with col_continuar:
-            if st.button(
-                "Continuar editando",
-                key="continuar_editando",
-                use_container_width=True
-            ):
-                st.session_state.confirmar_saida = False
-                st.rerun()
-
-        with col_sair:
-            if st.button(
-                "Sair sem salvar",
-                key="sair_sem_salvar",
-                use_container_width=True
-            ):
-                try:
-                    supabase.auth.sign_out()
-                except Exception:
-                    pass
-
-                st.session_state.user = None
-                st.session_state.exclusoes_pendentes = set()
-                st.session_state.confirmar_saida = False
-                st.session_state.confirmar_exclusao = False
-                st.session_state.confirmar_atualizacao = False
-                st.session_state.modal_mensagem = None
-                st.session_state.cache_links_pdf = {}
-
-                st.rerun()
-
-    mostrar_confirmacao_saida()
     st.stop()
 
 
@@ -713,9 +564,6 @@ if not st.session_state.user:
             st.session_state.ultima_atualizacao = None
             st.session_state.exclusoes_pendentes = set()
             st.session_state.confirmar_exclusao = False
-            st.session_state.confirmar_atualizacao = False
-            st.session_state.confirmar_saida = False
-            st.session_state.auto_atualizacao_bloqueada_ate = None
             st.session_state.modal_mensagem = None
             st.session_state.cache_links_pdf = {}
 
@@ -860,25 +708,10 @@ c3.metric("🟢 VÁLIDOS", validos)
 @st.fragment(run_every="1h")
 def verificacao_automatica_status():
     try:
-        agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
-        bloqueada_ate = st.session_state.auto_atualizacao_bloqueada_ate
-
-        if st.session_state.exclusoes_pendentes:
-            if not bloqueada_ate or agora >= bloqueada_ate:
-                st.session_state.confirmar_atualizacao = True
-                st.session_state.origem_confirmacao_atualizacao = "automatica"
-                st.session_state.auto_atualizacao_bloqueada_ate = (
-                    agora + timedelta(hours=1)
-                )
-                st.rerun(scope="app")
-
-            return
-
         houve_alteracao = atualizar_status_exames(user_id)
 
         if houve_alteracao:
             st.rerun(scope="app")
-
     except Exception:
         pass
 
@@ -890,36 +723,31 @@ col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
 
 with col_atualizar:
     if st.button("Atualizar status"):
-        if st.session_state.exclusoes_pendentes:
-            st.session_state.confirmar_atualizacao = True
-            st.session_state.origem_confirmacao_atualizacao = "manual"
-            st.rerun()
-        else:
-            try:
-                atualizar_status_exames(user_id)
+        try:
+            atualizar_status_exames(user_id)
 
-                st.session_state.ultima_atualizacao = datetime.now(
-                    ZoneInfo("America/Sao_Paulo")
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            )
+
+            st.rerun()
+
+        except Exception as e:
+            if eh_timeout_ou_erro_conexao(e):
+                abrir_modal(
+                    "Houve uma demora na comunicação com o servidor. "
+                    "Tente novamente em alguns segundos.",
+                    "Não foi possível atualizar",
+                    "error"
+                )
+            else:
+                abrir_modal(
+                    f"Erro ao atualizar os status: {e}",
+                    "Erro",
+                    "error"
                 )
 
-                st.rerun()
-
-            except Exception as e:
-                if eh_timeout_ou_erro_conexao(e):
-                    abrir_modal(
-                        "Houve uma demora na comunicação com o servidor. "
-                        "Tente novamente em alguns segundos.",
-                        "Não foi possível atualizar",
-                        "error"
-                    )
-                else:
-                    abrir_modal(
-                        f"Erro ao atualizar os status: {e}",
-                        "Erro",
-                        "error"
-                    )
-
-                st.rerun()
+            st.rerun()
 
 
 if st.session_state.ultima_atualizacao:
@@ -931,24 +759,18 @@ if st.session_state.ultima_atualizacao:
 
 with col_sair:
     if st.button("Sair"):
-        if st.session_state.exclusoes_pendentes:
-            st.session_state.confirmar_saida = True
-            st.rerun()
-        else:
-            try:
-                supabase.auth.sign_out()
-            except Exception:
-                pass
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
 
-            st.session_state.user = None
-            st.session_state.exclusoes_pendentes = set()
-            st.session_state.confirmar_exclusao = False
-            st.session_state.confirmar_atualizacao = False
-            st.session_state.confirmar_saida = False
-            st.session_state.modal_mensagem = None
-            st.session_state.cache_links_pdf = {}
+        st.session_state.user = None
+        st.session_state.exclusoes_pendentes = set()
+        st.session_state.confirmar_exclusao = False
+        st.session_state.modal_mensagem = None
+        st.session_state.cache_links_pdf = {}
 
-            st.rerun()
+        st.rerun()
 
 
 st.divider()
@@ -1686,8 +1508,6 @@ if not df.empty:
 
                         st.session_state.exclusoes_pendentes = set()
                         st.session_state.confirmar_exclusao = False
-                        st.session_state.confirmar_atualizacao = False
-                        st.session_state.confirmar_saida = False
 
                         if erro_storage:
                             abrir_modal(
