@@ -812,6 +812,11 @@ if st.button("Ler exames"):
             )
         st.rerun()
 
+    quantidade_cadastrados = 0
+    quantidade_atualizados = 0
+    quantidade_ignorados = 0
+    detalhes_problemas = []
+
     for arquivo in arquivos:
         try:
             arquivo_bytes = arquivo.getvalue()
@@ -895,13 +900,12 @@ if st.button("Ler exames"):
             exame_mais_recente is not None
             and data_novo_exame <= data_mais_recente
         ):
-            mensagens.append(
+            quantidade_ignorados += 1
+            detalhes_problemas.append(
                 (
                     "info",
-                    f"ℹ️ O exame {tipo_exame} do paciente {nome} "
-                    f"não foi cadastrado, pois já existe um exame "
-                    f"mais recente ou com a mesma data "
-                    f"({formatar_data(data_mais_recente)})."
+                    f"{arquivo.name}: exame já existente com data "
+                    f"{formatar_data(data_mais_recente)}."
                 )
             )
             continue
@@ -1104,55 +1108,57 @@ if st.button("Ler exames"):
                 exame_antigo_mais_recente.get("data_exame")
             )
 
-            mensagens.append(
-                (
-                    "success",
-                    f"🔄 O exame {tipo_exame} do paciente {nome} "
-                    f"foi atualizado. O exame anterior, realizado em "
-                    f"{formatar_data(data_antiga)}, foi substituído."
-                )
-            )
+            quantidade_atualizados += 1
         else:
-            mensagens.append(
-                (
-                    "success",
-                    f"➕ O exame {tipo_exame} do paciente {nome} "
-                    f"foi cadastrado com sucesso."
-                )
-            )
+            quantidade_cadastrados += 1
 
-    if mensagens:
-        st.session_state.modal_mensagem = "\n\n".join(
-            [mensagem for tipo, mensagem in mensagens]
-        )
+    # ========================================================
+    # RESUMO COMPACTO DO PROCESSAMENTO
+    # ========================================================
 
-        if any(
-            tipo == "error"
-            for tipo, mensagem in mensagens
-        ):
-            st.session_state.modal_tipo = "error"
-        elif any(
-            tipo == "warning"
-            for tipo, mensagem in mensagens
-        ):
-            st.session_state.modal_tipo = "warning"
-        elif any(
-            tipo == "success"
-            for tipo, mensagem in mensagens
-        ):
-            st.session_state.modal_tipo = "success"
-        else:
-            st.session_state.modal_tipo = "info"
+    quantidade_erros = sum(
+        1
+        for tipo, mensagem in mensagens
+        if tipo == "error"
+    )
 
-        st.session_state.modal_titulo = (
-            "Resultado do processamento"
-        )
+    quantidade_alertas = sum(
+        1
+        for tipo, mensagem in mensagens
+        if tipo == "warning"
+    )
+
+    detalhes = []
+
+    for tipo, mensagem in mensagens:
+        if tipo in ("error", "warning"):
+            detalhes.append(mensagem)
+
+    linhas_resumo = [
+        f"✅ {quantidade_cadastrados} exame(s) cadastrado(s).",
+        f"🔄 {quantidade_atualizados} exame(s) atualizado(s).",
+        f"ℹ️ {quantidade_ignorados} exame(s) não cadastrado(s) por já existir versão igual ou mais recente.",
+        f"⚠️ {quantidade_alertas} aviso(s).",
+        f"❌ {quantidade_erros} erro(s)."
+    ]
+
+    if detalhes:
+        linhas_resumo.append("")
+        linhas_resumo.append("Detalhes:")
+        linhas_resumo.extend(detalhes)
+
+    st.session_state.modal_mensagem = "\n".join(linhas_resumo)
+
+    if quantidade_erros > 0:
+        st.session_state.modal_tipo = "error"
+    elif quantidade_alertas > 0:
+        st.session_state.modal_tipo = "warning"
+    elif quantidade_cadastrados > 0 or quantidade_atualizados > 0:
+        st.session_state.modal_tipo = "success"
     else:
-        abrir_modal(
-            "Nenhum exame foi processado.",
-            "Resultado do processamento",
-            "info"
-        )
+        st.session_state.modal_tipo = "info"
+
+    st.session_state.modal_titulo = "Resultado do processamento"
 
     st.rerun()
 
@@ -1359,10 +1365,12 @@ if not df.empty:
         on_change=atualizar_exclusoes
     )
 
-    if st.session_state.exclusoes_pendentes:
-        if st.button("Excluir selecionados"):
-            st.session_state.confirmar_exclusao = True
-            st.rerun()
+    if st.button(
+        "Excluir selecionados",
+        disabled=not bool(st.session_state.exclusoes_pendentes)
+    ):
+        st.session_state.confirmar_exclusao = True
+        st.rerun()
 
     if st.session_state.confirmar_exclusao:
         @st.dialog("Pense bem!", dismissible=False)
