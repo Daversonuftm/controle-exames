@@ -572,7 +572,7 @@ if st.session_state.confirmar_atualizacao:
         with col_confirmar:
             if st.button(
                 "Atualizar",
-                key="confirmar_atualizacao",
+                key="botao_confirmar_atualizacao",
                 use_container_width=True
             ):
                 try:
