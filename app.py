@@ -10,48 +10,22 @@ from zoneinfo import ZoneInfo
 from supabase import create_client
 
 
-# ============================================================
-# CONFIGURAÇÃO
-# ============================================================
-
 st.set_page_config(
     page_title="Controle de Exames",
     layout="wide"
 )
 
-
-# ============================================================
-# SUPABASE
-# ============================================================
-
 url = "https://dpouzkapdaipnfnlsrio.supabase.co"
-
 key = "sb_publishable_hhN-A_o0Q9Y6o8lTGr2xCw_iBbSSXca"
 
-
-# Mantém o mesmo cliente durante a sessão do usuário.
-# Isso evita recriar a conexão e chamar set_session()
-# em todos os reruns do Streamlit.
-
 if "supabase_client" not in st.session_state:
-
-    st.session_state.supabase_client = create_client(
-        url,
-        key
-    )
-
+    st.session_state.supabase_client = create_client(url, key)
 
 supabase = st.session_state.supabase_client
 
 
-# ============================================================
-# FUNÇÕES AUXILIARES DE CONEXÃO
-# ============================================================
-
 def eh_timeout_ou_erro_conexao(erro):
-
     texto = str(erro).lower()
-
     return (
         isinstance(
             erro,
@@ -61,122 +35,57 @@ def eh_timeout_ou_erro_conexao(erro):
                 httpx.ConnectError
             )
         )
-        or
-        "readtimeout" in texto
-        or
-        "connecttimeout" in texto
-        or
-        "connecterror" in texto
-        or
-        "timed out" in texto
+        or "readtimeout" in texto
+        or "connecttimeout" in texto
+        or "connecterror" in texto
+        or "timed out" in texto
     )
 
 
-def executar_com_tentativa(
-    funcao,
-    tentativas=2
-):
-
-    """
-    Executa uma operação do Supabase.
-    Em caso de timeout de comunicação, tenta novamente
-    uma vez antes de retornar o erro.
-    """
-
+def executar_com_tentativa(funcao, tentativas=2):
     ultimo_erro = None
-
-    for tentativa in range(
-        tentativas
-    ):
-
+    for tentativa in range(tentativas):
         try:
-
             return funcao()
-
         except Exception as erro:
-
             ultimo_erro = erro
-
-            if not eh_timeout_ou_erro_conexao(
-                erro
-            ):
-
+            if not eh_timeout_ou_erro_conexao(erro):
                 raise
-
     raise ultimo_erro
 
 
-# ============================================================
-# CONTROLE DE MODAIS
-# ============================================================
-
 if "modal_mensagem" not in st.session_state:
-
     st.session_state.modal_mensagem = None
 
-
 if "modal_titulo" not in st.session_state:
-
     st.session_state.modal_titulo = "Aviso"
 
-
 if "modal_tipo" not in st.session_state:
-
     st.session_state.modal_tipo = "info"
 
 
-def abrir_modal(
-    mensagem,
-    titulo="Aviso",
-    tipo="info"
-):
-
+def abrir_modal(mensagem, titulo="Aviso", tipo="info"):
     st.session_state.modal_mensagem = mensagem
-
     st.session_state.modal_titulo = titulo
-
     st.session_state.modal_tipo = tipo
 
 
-@st.dialog(
-    "Aviso",
-    dismissible=False
-)
+@st.dialog("Aviso", dismissible=False)
 def mostrar_modal_mensagem():
-
     titulo = st.session_state.modal_titulo
-
     mensagem = st.session_state.modal_mensagem
-
     tipo = st.session_state.modal_tipo
 
-    st.subheader(
-        titulo
-    )
+    st.subheader(titulo)
 
     if tipo == "success":
-
-        st.success(
-            mensagem
-        )
-
+        st.success(mensagem)
     elif tipo == "warning":
-
-        st.warning(
-            mensagem
-        )
-
+        st.warning(mensagem)
     elif tipo == "error":
-
-        st.error(
-            mensagem
-        )
-
+        st.error(mensagem)
     else:
-
-        st.info(
-            mensagem
-        )
+        st.info(mensagem)
 
     st.divider()
 
@@ -185,552 +94,277 @@ def mostrar_modal_mensagem():
         key="botao_ok_modal_mensagem",
         use_container_width=True
     ):
-
         st.session_state.modal_mensagem = None
-
         st.rerun()
 
 
-# ============================================================
-# FUNÇÕES DE STATUS
-# ============================================================
-
-def calcular_status(
-    data_vencimento
-):
-
+def calcular_status(data_vencimento):
     hoje = datetime.now(
-        ZoneInfo(
-            "America/Sao_Paulo"
-        )
+        ZoneInfo("America/Sao_Paulo")
     ).date()
 
-    if isinstance(
-        data_vencimento,
-        datetime
-    ):
+    if isinstance(data_vencimento, datetime):
+        data_vencimento = data_vencimento.date()
 
-        data_vencimento = (
-            data_vencimento.date()
-        )
-
-    dias_para_vencer = (
-        data_vencimento - hoje
-    ).days
+    dias_para_vencer = (data_vencimento - hoje).days
 
     if dias_para_vencer < 0:
-
         return "🔴 VENCIDO"
 
     if dias_para_vencer <= 30:
-
         return "🟡 EM ALERTA"
 
     return "🟢 VALIDO"
 
 
-def atualizar_status_exames(
-    user_id
-):
-
-    """
-    Atualiza os status dos exames usando poucas requisições.
-
-    Esta mesma função é usada:
-    - no login;
-    - no botão Atualizar status;
-    - na atualização automática.
-    """
-
+def atualizar_status_exames(user_id):
     resposta = executar_com_tentativa(
         lambda: supabase.table(
             "exames"
         ).select(
             "id, data_vencimento, status"
         ).eq(
-            "hospital_id",
-            user_id
+            "hospital_id", user_id
         ).execute()
     )
 
     exames = resposta.data or []
 
     ids_vencidos = []
-
     ids_alerta = []
-
     ids_validos = []
 
     for exame in exames:
-
         try:
-
             data_vencimento = datetime.strptime(
                 exame["data_vencimento"],
                 "%d/%m/%Y"
             )
 
-            novo_status = calcular_status(
-                data_vencimento
-            )
+            novo_status = calcular_status(data_vencimento)
+            status_atual = exame.get("status")
 
-            status_atual = exame.get(
-                "status"
-            )
-
-            if (
-                status_atual == novo_status
-            ):
-
+            if status_atual == novo_status:
                 continue
 
             if novo_status == "🔴 VENCIDO":
-
-                ids_vencidos.append(
-                    exame["id"]
-                )
-
+                ids_vencidos.append(exame["id"])
             elif novo_status == "🟡 EM ALERTA":
-
-                ids_alerta.append(
-                    exame["id"]
-                )
-
+                ids_alerta.append(exame["id"])
             elif novo_status == "🟢 VALIDO":
-
-                ids_validos.append(
-                    exame["id"]
-                )
-
+                ids_validos.append(exame["id"])
         except Exception:
-
             pass
 
-
-    # ========================================================
-    # ATUALIZA EM LOTE
-    # ========================================================
-
     if ids_vencidos:
-
         executar_com_tentativa(
             lambda: supabase.table(
                 "exames"
             ).update(
-                {
-                    "status": "🔴 VENCIDO"
-                }
+                {"status": "🔴 VENCIDO"}
             ).eq(
-                "hospital_id",
-                user_id
+                "hospital_id", user_id
             ).in_(
-                "id",
-                ids_vencidos
+                "id", ids_vencidos
             ).execute()
         )
-
 
     if ids_alerta:
-
         executar_com_tentativa(
             lambda: supabase.table(
                 "exames"
             ).update(
-                {
-                    "status": "🟡 EM ALERTA"
-                }
+                {"status": "🟡 EM ALERTA"}
             ).eq(
-                "hospital_id",
-                user_id
+                "hospital_id", user_id
             ).in_(
-                "id",
-                ids_alerta
+                "id", ids_alerta
             ).execute()
         )
-
 
     if ids_validos:
-
         executar_com_tentativa(
             lambda: supabase.table(
                 "exames"
             ).update(
-                {
-                    "status": "🟢 VALIDO"
-                }
+                {"status": "🟢 VALIDO"}
             ).eq(
-                "hospital_id",
-                user_id
+                "hospital_id", user_id
             ).in_(
-                "id",
-                ids_validos
+                "id", ids_validos
             ).execute()
         )
 
-
     return bool(
-        ids_vencidos
-        or
-        ids_alerta
-        or
-        ids_validos
+        ids_vencidos or ids_alerta or ids_validos
     )
 
 
-# ============================================================
-# FUNÇÕES PARA COMPARAÇÃO
-# ============================================================
-
-def normalizar_texto_comparacao(
-    texto
-):
-
+def normalizar_texto_comparacao(texto):
     if texto is None:
-
         return ""
 
-    texto = str(
-        texto
-    )
-
-    texto = texto.upper()
-
-    texto = re.sub(
-        r"\s+",
-        " ",
-        texto
-    )
-
+    texto = str(texto).upper()
+    texto = re.sub(r"\s+", " ", texto)
     return texto.strip()
 
 
-def converter_data_exame(
-    data
-):
-
+def converter_data_exame(data):
     if not data:
-
         return None
 
-    if isinstance(
-        data,
-        datetime
-    ):
-
+    if isinstance(data, datetime):
         return data
 
-    if isinstance(
-        data,
-        str
-    ):
-
+    if isinstance(data, str):
         try:
-
-            return datetime.strptime(
-                data,
-                "%d/%m/%Y"
-            )
-
+            return datetime.strptime(data, "%d/%m/%Y")
         except Exception:
-
             return None
 
     return None
 
 
-def formatar_data(
-    data
-):
-
-    data_convertida = converter_data_exame(
-        data
-    )
+def formatar_data(data):
+    data_convertida = converter_data_exame(data)
 
     if data_convertida:
+        return data_convertida.strftime("%d/%m/%Y")
 
-        return data_convertida.strftime(
-            "%d/%m/%Y"
-        )
-
-    return str(
-        data
-    )
+    return str(data)
 
 
-def buscar_exames_usuario(
-    user_id
-):
-
+def buscar_exames_usuario(user_id):
     resposta = executar_com_tentativa(
         lambda: supabase.table(
             "exames"
         ).select(
             "id, data_nascimento, paciente, prontuario_registro, exame, data_exame, data_vencimento, status, arquivo_path"
         ).eq(
-            "hospital_id",
-            user_id
+            "hospital_id", user_id
         ).execute()
     )
 
     return resposta.data or []
 
 
-# ============================================================
-# CACHE DE LINKS DOS PDFs
-# ============================================================
-
 if "cache_links_pdf" not in st.session_state:
-
     st.session_state.cache_links_pdf = {}
 
 
-def criar_link_pdf(
-    linha
-):
-
-    arquivo_path = linha.get(
-        "arquivo_path"
-    )
-
-    nome_exame = str(
-        linha.get(
-            "exame",
-            "EXAME"
-        )
-    )
+def criar_link_pdf(linha):
+    arquivo_path = linha.get("arquivo_path")
+    nome_exame = str(linha.get("exame", "EXAME"))
 
     if not arquivo_path:
-
         return nome_exame
 
-
     agora = datetime.now(
-        ZoneInfo(
-            "America/Sao_Paulo"
-        )
+        ZoneInfo("America/Sao_Paulo")
     )
 
-
-    # ========================================================
-    # VERIFICAR CACHE
-    # ========================================================
-
-    cache = st.session_state.cache_links_pdf.get(
-        arquivo_path
-    )
+    cache = st.session_state.cache_links_pdf.get(arquivo_path)
 
     if cache:
-
-        link_cache = cache.get(
-            "link"
-        )
-
-        validade_cache = cache.get(
-            "validade"
-        )
+        link_cache = cache.get("link")
+        validade_cache = cache.get("validade")
 
         if (
             link_cache
-            and
-            validade_cache
-            and
-            agora < validade_cache
+            and validade_cache
+            and agora < validade_cache
         ):
-
-            return (
-                f"{link_cache}#EXAME_{nome_exame}"
-            )
-
-
-    # ========================================================
-    # CRIAR NOVA URL
-    # ========================================================
+            return f"{link_cache}#EXAME_{nome_exame}"
 
     try:
-
         resposta = executar_com_tentativa(
             lambda: supabase.storage.from_(
                 "exames-pdf"
             ).create_signed_url(
-                arquivo_path,
-                3600
+                arquivo_path, 3600
             )
         )
 
-        if isinstance(
-            resposta,
-            dict
-        ):
-
+        if isinstance(resposta, dict):
             link = (
-                resposta.get(
-                    "signedURL"
-                )
-                or
-                resposta.get(
-                    "signed_url"
-                )
-                or
-                resposta.get(
-                    "signedUrl"
-                )
+                resposta.get("signedURL")
+                or resposta.get("signed_url")
+                or resposta.get("signedUrl")
             )
-
         else:
-
             link = getattr(
-                resposta,
-                "signed_url",
-                None
+                resposta, "signed_url", None
             )
 
             if not link:
-
                 link = getattr(
-                    resposta,
-                    "signedURL",
-                    None
+                    resposta, "signedURL", None
                 )
 
-
         if link:
-
             st.session_state.cache_links_pdf[
                 arquivo_path
             ] = {
-
                 "link": link,
-
                 "validade": (
-                    agora
-                    +
-                    timedelta(
-                        minutes=55
-                    )
+                    agora + timedelta(minutes=55)
                 )
-
             }
 
-            return (
-                f"{link}#EXAME_{nome_exame}"
-            )
-
+            return f"{link}#EXAME_{nome_exame}"
 
     except Exception:
-
         pass
-
 
     return nome_exame
 
 
-# ============================================================
-# FUNÇÕES DE LEITURA DOS PDFS
-# ============================================================
-
-def identificar_exame(
-    texto
-):
-
-    if texto.lower().count(
-        "resultado"
-    ) > 5:
-
+def identificar_exame(texto):
+    if texto.lower().count("resultado") > 5:
         return "LAUDO PRÉ TRANSPLANTE"
 
-
-    linhas = texto.split(
-        "\n"
-    )
-
+    linhas = texto.split("\n")
 
     palavras_chave = [
-
         "ELETROCARDIOGRAMA",
-
         "ULTRASSONOGRAFIA",
-
         "ENDOSCOPIA",
-
         "ECOCARDIOGRAMA",
-
         "TESTE ERGOMÉTRICO",
-
         "TESTE ERGOMETRICO",
-
         "DOPPLER",
-
         "HEMODINÂMICO",
-
         "HEMODINAMICO",
-
         "CORONARIOGRAFIA",
-
         "CATETERISMO"
-
     ]
 
-
     for linha in linhas:
-
         linha_limpa = linha.strip()
 
         for palavra in palavras_chave:
-
             if palavra in linha_limpa.upper():
-
                 return linha_limpa.upper()
-
 
     texto = texto.lower()
 
-
-    if (
-        "endoscopia" in texto
-        or
-        "eda" in texto
-    ):
-
+    if "endoscopia" in texto or "eda" in texto:
         return "ENDOSCOPIA"
 
-
-    if (
-        "ecocardiograma" in texto
-        or
-        "ecocardiografia" in texto
-    ):
-
+    if "ecocardiograma" in texto or "ecocardiografia" in texto:
         return "ECOCARDIOGRAMA"
 
-
-    if (
-        "ultrassom" in texto
-        or
-        "ultrassonografia" in texto
-    ):
-
+    if "ultrassom" in texto or "ultrassonografia" in texto:
         return "ULTRASSOM"
 
-
-    if (
-        "pré tx" in texto
-        or
-        "pre tx" in texto
-    ):
-
+    if "pré tx" in texto or "pre tx" in texto:
         return "LAUDO PRÉ TRANSPLANTE"
-
 
     return "EXAME"
 
 
-def limpar_nome(
-    nome
-):
-
-    nome = nome.split(
-        "\n"
-    )[0]
+def limpar_nome(nome):
+    nome = nome.split("\n")[0]
 
     nome = re.split(
         r'Origem|Sexo|Idade|Nascimento|Dt\.|Convênio',
@@ -740,146 +374,77 @@ def limpar_nome(
     return nome.strip()
 
 
-def ler_pdf(
-    arquivo
-):
-
+def ler_pdf(arquivo):
     texto = ""
 
-
-    with pdfplumber.open(
-        arquivo
-    ) as pdf:
-
+    with pdfplumber.open(arquivo) as pdf:
         for page in pdf.pages:
-
             conteudo = page.extract_text()
 
             if conteudo:
-
-                texto += (
-                    conteudo
-                    +
-                    "\n"
-                )
-
-
-    # ========================================================
-    # DATA DE NASCIMENTO
-    # ========================================================
+                texto += conteudo + "\n"
 
     data_nascimento = None
 
-
     padroes_nascimento = [
-
         r'Dt\.\s*Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
-
         r'Data\s+de\s+Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
-
         r'Nascimento[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
-
     ]
 
-
     for padrao in padroes_nascimento:
-
         match_nascimento = re.search(
-            padrao,
-            texto,
-            re.IGNORECASE
+            padrao, texto, re.IGNORECASE
         )
 
         if match_nascimento:
-
             data_nascimento = datetime.strptime(
                 match_nascimento.group(1),
                 "%d/%m/%Y"
             )
-
             break
-
-
-    # ========================================================
-    # NOME
-    # ========================================================
 
     nome = None
 
-
     padroes_nome = [
-
         r'Nome Civil:\s*(.*)',
-
         r'Nome\s*\.{0,}\s*:\s*(.*)',
-
         r'Paciente:\s*(.*)'
-
     ]
 
-
     for padrao in padroes_nome:
-
-        match = re.search(
-            padrao,
-            texto
-        )
+        match = re.search(padrao, texto)
 
         if match:
-
             nome = limpar_nome(
                 match.group(1).strip()
             )
-
             break
-
-
-    # ========================================================
-    # DATA DO EXAME
-    # ========================================================
 
     data_exame = None
 
-
     padroes_data = [
-
         r'Data do exame[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
-
         r'Data realização[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
-
         r'Realização[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})',
-
         r'Emissão do laudo[:\s]*([0-9]{2}/[0-9]{2}/[0-9]{4})'
-
     ]
 
-
     for padrao in padroes_data:
-
         match = re.search(
-            padrao,
-            texto,
-            re.IGNORECASE
+            padrao, texto, re.IGNORECASE
         )
 
         if match:
-
             data_exame = datetime.strptime(
                 match.group(1),
                 "%d/%m/%Y"
             )
-
             break
 
-
     if not data_exame:
-
-        for linha in texto.split(
-            "\n"
-        ):
-
+        for linha in texto.split("\n"):
             if "nasc" in linha.lower():
-
                 continue
 
             match = re.search(
@@ -888,201 +453,100 @@ def ler_pdf(
             )
 
             if match:
-
                 data_exame = datetime.strptime(
                     match.group(0),
                     "%d/%m/%Y"
                 )
-
                 break
 
-
-    # ========================================================
-    # TIPO DO EXAME
-    # ========================================================
-
-    tipo_exame = identificar_exame(
-        texto
-    )
-
-
-    # ========================================================
-    # PRONTUÁRIO / REGISTRO
-    # ========================================================
+    tipo_exame = identificar_exame(texto)
 
     prontuario_registro = None
 
-
     match_prontuario = re.search(
         r'Prontu[aá]rio[:\s]*([0-9/]+)',
-        texto,
-        re.IGNORECASE
+        texto, re.IGNORECASE
     )
 
-
     if match_prontuario:
-
         prontuario_registro = re.sub(
-            r'\D',
-            '',
+            r'\D', '',
             match_prontuario.group(1)
         )
 
-
     if not prontuario_registro:
-
         match_registro = re.search(
             r'Registro.*?([0-9]{5,})',
-            texto,
-            re.IGNORECASE
+            texto, re.IGNORECASE
         )
 
         if match_registro:
-
-            prontuario_registro = (
-                match_registro.group(1)
-            )
-
+            prontuario_registro = match_registro.group(1)
 
     return (
-
         data_nascimento,
-
         nome,
-
         data_exame,
-
         tipo_exame,
-
         prontuario_registro
-
     )
 
-
-# ============================================================
-# CONTROLE DA SESSÃO
-# ============================================================
 
 if "user" not in st.session_state:
-
     st.session_state.user = None
 
-
 if "ultima_atualizacao" not in st.session_state:
-
     st.session_state.ultima_atualizacao = None
 
-
 if "filtro_status" not in st.session_state:
-
-    st.session_state.filtro_status = (
-        "Todos os exames"
-    )
-
+    st.session_state.filtro_status = "Todos os exames"
 
 if "busca_paciente" not in st.session_state:
-
     st.session_state.busca_paciente = ""
 
-
 if "busca_prontuario" not in st.session_state:
-
     st.session_state.busca_prontuario = ""
 
-
 if "exclusoes_pendentes" not in st.session_state:
-
     st.session_state.exclusoes_pendentes = set()
 
-
 if "confirmar_exclusao" not in st.session_state:
-
     st.session_state.confirmar_exclusao = False
 
 
-# ============================================================
-# TÍTULO
-# ============================================================
+st.title("Sistema de Controle de Exames")
 
-st.title(
-    "Sistema de Controle de Exames"
-)
-
-
-# ============================================================
-# MOSTRAR MODAL PENDENTE
-# ============================================================
 
 if st.session_state.modal_mensagem:
-
     mostrar_modal_mensagem()
-
     st.stop()
 
 
-# ============================================================
-# LOGIN
-# ============================================================
-
 if not st.session_state.user:
+    st.subheader("Login")
 
-    st.subheader(
-        "Login"
-    )
+    with st.form("form_login"):
+        email = st.text_input("Email")
+        senha = st.text_input("Senha", type="password")
 
-
-    with st.form(
-        "form_login"
-    ):
-
-        email = st.text_input(
-            "Email"
-        )
-
-        senha = st.text_input(
-            "Senha",
-            type="password"
-        )
-
-
-        col1, col2 = st.columns(
-            2
-        )
-
+        col1, col2 = st.columns(2)
 
         with col1:
-
-            entrar = st.form_submit_button(
-                "Entrar"
-            )
-
+            entrar = st.form_submit_button("Entrar")
 
         with col2:
-
-            cadastrar = st.form_submit_button(
-                "Cadastrar"
-            )
-
-
-    # ========================================================
-    # ENTRAR
-    # ========================================================
+            cadastrar = st.form_submit_button("Cadastrar")
 
     if entrar:
-
         if not email or not senha:
-
             abrir_modal(
                 "Digite o email e a senha para efetuar o login.",
                 "Dados incompletos",
                 "warning"
             )
-
             st.rerun()
 
-
         try:
-
             resposta_login = executar_com_tentativa(
                 lambda: supabase.auth.sign_in_with_password(
                     {
@@ -1092,53 +556,28 @@ if not st.session_state.user:
                 )
             )
 
+            user_id_login = resposta_login.user.id
 
-            user_id_login = (
-                resposta_login.user.id
-            )
+            atualizar_status_exames(user_id_login)
 
-
-            # Atualiza os status no momento do login
-
-            atualizar_status_exames(
-                user_id_login
-            )
-
-
-            st.session_state.user = (
-                resposta_login
-            )
-
-
+            st.session_state.user = resposta_login
             st.session_state.ultima_atualizacao = None
-
             st.session_state.exclusoes_pendentes = set()
-
             st.session_state.confirmar_exclusao = False
-
             st.session_state.modal_mensagem = None
-
             st.session_state.cache_links_pdf = {}
-
 
             st.rerun()
 
-
         except Exception as e:
-
-            if eh_timeout_ou_erro_conexao(
-                e
-            ):
-
+            if eh_timeout_ou_erro_conexao(e):
                 abrir_modal(
                     "Houve uma demora na comunicação com o servidor. "
                     "Verifique sua conexão e tente novamente em alguns segundos.",
                     "Não foi possível conectar",
                     "error"
                 )
-
             else:
-
                 abrir_modal(
                     f"Não foi possível entrar no sistema.\n\n{e}",
                     "Erro no login",
@@ -1147,26 +586,16 @@ if not st.session_state.user:
 
             st.rerun()
 
-
-    # ========================================================
-    # CADASTRAR
-    # ========================================================
-
     if cadastrar:
-
         if not email or not senha:
-
             abrir_modal(
                 "Digite o email e a senha para realizar o cadastro.",
                 "Dados incompletos",
                 "warning"
             )
-
             st.rerun()
 
-
         try:
-
             executar_com_tentativa(
                 lambda: supabase.auth.sign_up(
                     {
@@ -1176,34 +605,24 @@ if not st.session_state.user:
                 )
             )
 
-
             abrir_modal(
-                "Cadastro realizado! "
-                "Enviamos um email de confirmação para o endereço informado. "
-                "Para efetuar o login, é necessário confirmar o email. "
-                "Verifique também a caixa de spam.",
+                "Cadastro realizado! Enviamos um email de confirmação "
+                "para o endereço informado. Para efetuar o login, é "
+                "necessário confirmar o email. Verifique também a caixa de spam.",
                 "Cadastro realizado",
                 "success"
             )
-
             st.rerun()
 
-
         except Exception as e:
-
-            if eh_timeout_ou_erro_conexao(
-                e
-            ):
-
+            if eh_timeout_ou_erro_conexao(e):
                 abrir_modal(
                     "Houve uma demora na comunicação com o servidor. "
                     "Tente novamente em alguns segundos.",
                     "Não foi possível conectar",
                     "error"
                 )
-
             else:
-
                 abrir_modal(
                     f"Erro ao cadastrar: {e}",
                     "Erro no cadastro",
@@ -1212,63 +631,34 @@ if not st.session_state.user:
 
             st.rerun()
 
-
     st.stop()
 
 
-# ============================================================
-# SESSÃO SUPABASE
-# ============================================================
+user_id = st.session_state.user.user.id
 
-# NÃO chamar set_session() aqui.
-#
-# O cliente autenticado está mantido em session_state.
-# Isso evita uma chamada ao Auth em cada rerun.
-
-
-user_id = (
-    st.session_state.user.user.id
-)
-
-
-# ============================================================
-# BANCO
-# ============================================================
 
 try:
-
     res = executar_com_tentativa(
         lambda: supabase.table(
             "exames"
         ).select(
             "id, data_nascimento, paciente, prontuario_registro, exame, data_exame, data_vencimento, status, arquivo_path"
         ).eq(
-            "hospital_id",
-            user_id
+            "hospital_id", user_id
         ).execute()
     )
 
-
-    df = pd.DataFrame(
-        res.data or []
-    )
-
+    df = pd.DataFrame(res.data or [])
 
 except Exception as e:
-
-    if eh_timeout_ou_erro_conexao(
-        e
-    ):
-
+    if eh_timeout_ou_erro_conexao(e):
         abrir_modal(
             "Houve uma demora na comunicação com o servidor. "
             "Tente novamente em alguns segundos.",
             "Conexão temporariamente indisponível",
             "error"
         )
-
     else:
-
         abrir_modal(
             f"Não foi possível carregar os exames.\n\n{e}",
             "Erro ao carregar os exames",
@@ -1278,149 +668,79 @@ except Exception as e:
     st.rerun()
 
 
-# ============================================================
-# DASHBOARD
-# ============================================================
-
 if not df.empty:
-
     vencidos = len(
         df[
             df["status"].fillna("").str.contains(
-                "VENCIDO",
-                na=False
+                "VENCIDO", na=False
             )
         ]
     )
-
 
     alerta = len(
         df[
             df["status"].fillna("").str.contains(
-                "ALERTA",
-                na=False
+                "ALERTA", na=False
             )
         ]
     )
-
 
     validos = len(
         df[
             df["status"].fillna("").str.contains(
-                "VALIDO",
-                na=False
+                "VALIDO", na=False
             )
         ]
     )
-
 else:
-
     vencidos = 0
-
     alerta = 0
-
     validos = 0
 
 
-c1, c2, c3 = st.columns(
-    3
-)
+c1, c2, c3 = st.columns(3)
+
+c1.metric("🔴 VENCIDOS", vencidos)
+c2.metric("🟡 EM ALERTA", alerta)
+c3.metric("🟢 VÁLIDOS", validos)
 
 
-c1.metric(
-    "🔴 VENCIDOS",
-    vencidos
-)
-
-
-c2.metric(
-    "🟡 EM ALERTA",
-    alerta
-)
-
-
-c3.metric(
-    "🟢 VÁLIDOS",
-    validos
-)
-
-
-# ============================================================
-# ATUALIZAÇÃO AUTOMÁTICA A CADA 1 HORA
-# ============================================================
-
-@st.fragment(
-    run_every="1h"
-)
+@st.fragment(run_every="1h")
 def verificacao_automatica_status():
-
     try:
-
-        houve_alteracao = atualizar_status_exames(
-            user_id
-        )
+        houve_alteracao = atualizar_status_exames(user_id)
 
         if houve_alteracao:
-
-            st.rerun(
-                scope="app"
-            )
-
+            st.rerun(scope="app")
     except Exception:
-
         pass
 
 
 verificacao_automatica_status()
 
 
-# ============================================================
-# ATUALIZAR STATUS + SAIR
-# ============================================================
-
-col_atualizar, col_espaco, col_sair = st.columns(
-    [1, 5, 1]
-)
-
+col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
 
 with col_atualizar:
-
-    if st.button(
-        "Atualizar status"
-    ):
-
+    if st.button("Atualizar status"):
         try:
+            atualizar_status_exames(user_id)
 
-            atualizar_status_exames(
-                user_id
-            )
-
-            st.session_state.ultima_atualizacao = (
-                datetime.now(
-                    ZoneInfo(
-                        "America/Sao_Paulo"
-                    )
-                )
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
             )
 
             st.rerun()
 
-
         except Exception as e:
-
-            if eh_timeout_ou_erro_conexao(
-                e
-            ):
-
+            if eh_timeout_ou_erro_conexao(e):
                 abrir_modal(
                     "Houve uma demora na comunicação com o servidor. "
                     "Tente novamente em alguns segundos.",
                     "Não foi possível atualizar",
                     "error"
                 )
-
             else:
-
                 abrir_modal(
                     f"Erro ao atualizar os status: {e}",
                     "Erro",
@@ -1431,7 +751,6 @@ with col_atualizar:
 
 
 if st.session_state.ultima_atualizacao:
-
     st.caption(
         f"Atualizado em: "
         f"{st.session_state.ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')}"
@@ -1439,40 +758,23 @@ if st.session_state.ultima_atualizacao:
 
 
 with col_sair:
-
-    if st.button(
-        "Sair"
-    ):
-
+    if st.button("Sair"):
         try:
-
             supabase.auth.sign_out()
-
         except Exception:
-
             pass
 
-
         st.session_state.user = None
-
         st.session_state.exclusoes_pendentes = set()
-
         st.session_state.confirmar_exclusao = False
-
         st.session_state.modal_mensagem = None
-
         st.session_state.cache_links_pdf = {}
-
 
         st.rerun()
 
 
 st.divider()
 
-
-# ============================================================
-# UPLOAD
-# ============================================================
 
 arquivos = st.file_uploader(
     "Selecionar PDFs",
@@ -1481,70 +783,37 @@ arquivos = st.file_uploader(
 )
 
 
-if st.button(
-    "Ler exames"
-):
-
+if st.button("Ler exames"):
     mensagens = []
 
-
     if not arquivos:
-
         abrir_modal(
             "Selecione pelo menos um PDF.",
             "Nenhum PDF selecionado",
             "warning"
         )
-
         st.rerun()
 
-
-    # ========================================================
-    # BUSCAR OS EXAMES EXISTENTES UMA ÚNICA VEZ
-    # ========================================================
-
     try:
-
-        exames_existentes = buscar_exames_usuario(
-            user_id
-        )
-
+        exames_existentes = buscar_exames_usuario(user_id)
     except Exception as e:
-
-        if eh_timeout_ou_erro_conexao(
-            e
-        ):
-
+        if eh_timeout_ou_erro_conexao(e):
             abrir_modal(
                 "Houve uma demora na comunicação com o servidor. "
                 "Tente novamente em alguns segundos.",
                 "Não foi possível consultar os exames",
                 "error"
             )
-
         else:
-
             abrir_modal(
                 f"Erro ao consultar os exames: {e}",
                 "Erro",
                 "error"
             )
-
         st.rerun()
 
-
-    # ========================================================
-    # PROCESSAR PDFs
-    # ========================================================
-
     for arquivo in arquivos:
-
-        # =====================================================
-        # LER PDF
-        # =====================================================
-
         try:
-
             arquivo_bytes = arquivo.getvalue()
 
             (
@@ -1553,189 +822,92 @@ if st.button(
                 data_exame,
                 tipo_exame,
                 prontuario
-            ) = ler_pdf(
-                arquivo
-            )
+            ) = ler_pdf(arquivo)
 
         except Exception as e:
-
             mensagens.append(
                 (
                     "error",
                     f"Erro ao ler o PDF {arquivo.name}: {e}"
                 )
             )
-
             continue
 
-
-        # =====================================================
-        # VALIDAR DATA
-        # =====================================================
-
         if not data_exame:
-
             mensagens.append(
                 (
                     "warning",
                     f"Data não encontrada em {arquivo.name}."
                 )
             )
-
             continue
 
-
-        # =====================================================
-        # VALIDAR NOME
-        # =====================================================
-
         if not nome:
-
             mensagens.append(
                 (
                     "warning",
                     f"Nome do paciente não encontrado em {arquivo.name}."
                 )
             )
-
             continue
 
-
-        # =====================================================
-        # COMPARAÇÃO EM MEMÓRIA
-        # =====================================================
-
-        paciente_comparacao = (
-            normalizar_texto_comparacao(
-                nome
-            )
-        )
-
-        exame_comparacao = (
-            normalizar_texto_comparacao(
-                tipo_exame
-            )
-        )
-
+        paciente_comparacao = normalizar_texto_comparacao(nome)
+        exame_comparacao = normalizar_texto_comparacao(tipo_exame)
 
         exames_anteriores = []
 
-
         for exame_existente in exames_existentes:
-
-            paciente_existente = (
-                normalizar_texto_comparacao(
-                    exame_existente.get(
-                        "paciente"
-                    )
-                )
+            paciente_existente = normalizar_texto_comparacao(
+                exame_existente.get("paciente")
             )
 
-            tipo_existente = (
-                normalizar_texto_comparacao(
-                    exame_existente.get(
-                        "exame"
-                    )
-                )
-
+            tipo_existente = normalizar_texto_comparacao(
+                exame_existente.get("exame")
+            )
 
             if (
-                paciente_existente
-                ==
-                paciente_comparacao
-                and
-                tipo_existente
-                ==
-                exame_comparacao
+                paciente_existente == paciente_comparacao
+                and tipo_existente == exame_comparacao
             ):
+                exames_anteriores.append(exame_existente)
 
-                exames_anteriores.append(
-                    exame_existente
-                )
-
-
-        data_novo_exame = converter_data_exame(
-            data_exame
-        )
-
-
-        # =====================================================
-        # ENCONTRAR O MAIS RECENTE
-        # =====================================================
+        data_novo_exame = converter_data_exame(data_exame)
 
         exame_mais_recente = None
-
         data_mais_recente = None
 
-
         for exame_existente in exames_anteriores:
-
             data_existente = converter_data_exame(
-                exame_existente.get(
-                    "data_exame"
-                )
+                exame_existente.get("data_exame")
             )
 
             if not data_existente:
-
                 continue
-
 
             if (
                 data_mais_recente is None
-                or
-                data_existente > data_mais_recente
+                or data_existente > data_mais_recente
             ):
-
                 data_mais_recente = data_existente
-
                 exame_mais_recente = exame_existente
-
-
-        # =====================================================
-        # IGNORAR SE IGUAL OU MAIS ANTIGO
-        # =====================================================
 
         if (
             exame_mais_recente is not None
-            and
-            data_novo_exame <= data_mais_recente
+            and data_novo_exame <= data_mais_recente
         ):
-
             mensagens.append(
                 (
                     "info",
-                    f"ℹ️ O exame {tipo_exame} do paciente "
-                    f"{nome} não foi cadastrado, pois já existe "
-                    f"um exame mais recente ou com a mesma data "
+                    f"ℹ️ O exame {tipo_exame} do paciente {nome} "
+                    f"não foi cadastrado, pois já existe um exame "
+                    f"mais recente ou com a mesma data "
                     f"({formatar_data(data_mais_recente)})."
                 )
             )
-
             continue
 
-
-        # =====================================================
-        # CALCULAR VALIDADE
-        # =====================================================
-
-        data_vencimento = (
-            data_exame
-            +
-            timedelta(
-                days=180
-            )
-        )
-
-
-        status = calcular_status(
-            data_vencimento
-        )
-
-
-        # =====================================================
-        # CRIAR CAMINHO DO PDF
-        # =====================================================
+        data_vencimento = data_exame + timedelta(days=180)
+        status = calcular_status(data_vencimento)
 
         nome_arquivo = re.sub(
             r"[^A-Za-z0-9._-]",
@@ -1743,23 +915,10 @@ if st.button(
             arquivo.name
         )
 
-
-        nome_unico = (
-            f"{uuid.uuid4().hex}_{nome_arquivo}"
-        )
-
-
-        arquivo_path = (
-            f"{user_id}/{nome_unico}"
-        )
-
-
-        # =====================================================
-        # UPLOAD DO PDF
-        # =====================================================
+        nome_unico = f"{uuid.uuid4().hex}_{nome_arquivo}"
+        arquivo_path = f"{user_id}/{nome_unico}"
 
         try:
-
             executar_com_tentativa(
                 lambda: supabase.storage.from_(
                     "exames-pdf"
@@ -1772,78 +931,40 @@ if st.button(
                     }
                 )
             )
-
         except Exception as e:
-
-            if eh_timeout_ou_erro_conexao(
-                e
-            ):
-
+            if eh_timeout_ou_erro_conexao(e):
                 mensagens.append(
                     (
                         "error",
-                        f"Não foi possível armazenar o PDF "
-                        f"{arquivo.name} porque a comunicação "
-                        f"com o servidor demorou demais."
+                        f"Não foi possível armazenar o PDF {arquivo.name} "
+                        f"porque a comunicação com o servidor demorou demais."
                     )
                 )
-
             else:
-
                 mensagens.append(
                     (
                         "error",
-                        f"Erro ao armazenar o PDF "
-                        f"{arquivo.name}: {e}"
+                        f"Erro ao armazenar o PDF {arquivo.name}: {e}"
                     )
                 )
-
             continue
 
-
-        # =====================================================
-        # SALVAR NOVO EXAME NO BANCO
-        # =====================================================
-
         novo_exame = {
-
             "hospital_id": user_id,
-
             "data_nascimento": (
-                data_nascimento.strftime(
-                    "%d/%m/%Y"
-                )
-                if data_nascimento
-                else None
+                data_nascimento.strftime("%d/%m/%Y")
+                if data_nascimento else None
             ),
-
             "paciente": nome,
-
             "prontuario_registro": prontuario,
-
             "exame": tipo_exame,
-
-            "data_exame": (
-                data_exame.strftime(
-                    "%d/%m/%Y"
-                )
-            ),
-
-            "data_vencimento": (
-                data_vencimento.strftime(
-                    "%d/%m/%Y"
-                )
-            ),
-
+            "data_exame": data_exame.strftime("%d/%m/%Y"),
+            "data_vencimento": data_vencimento.strftime("%d/%m/%Y"),
             "status": status,
-
             "arquivo_path": arquivo_path
-
         }
 
-
         try:
-
             resposta_insert = executar_com_tentativa(
                 lambda: supabase.table(
                     "exames"
@@ -1851,113 +972,62 @@ if st.button(
                     novo_exame
                 ).execute()
             )
-
         except Exception as e:
-
-            # Se o banco falhar,
-            # remove o PDF recém-enviado.
-
             try:
-
                 executar_com_tentativa(
                     lambda: supabase.storage.from_(
                         "exames-pdf"
-                    ).remove(
-                        [
-                            arquivo_path
-                        ]
-                    )
+                    ).remove([arquivo_path])
                 )
-
             except Exception:
-
                 pass
 
-
-            if eh_timeout_ou_erro_conexao(
-                e
-            ):
-
+            if eh_timeout_ou_erro_conexao(e):
                 mensagens.append(
                     (
                         "error",
-                        f"Não foi possível salvar os dados de "
-                        f"{arquivo.name} porque a comunicação "
-                        f"com o servidor demorou demais."
+                        f"Não foi possível salvar os dados de {arquivo.name} "
+                        f"porque a comunicação com o servidor demorou demais."
                     )
                 )
-
             else:
-
                 mensagens.append(
                     (
                         "error",
-                        f"Erro ao salvar os dados de "
-                        f"{arquivo.name}: {e}"
+                        f"Erro ao salvar os dados de {arquivo.name}: {e}"
                     )
                 )
-
             continue
-
-
-        # =====================================================
-        # ADICIONAR O NOVO EXAME À LISTA EM MEMÓRIA
-        # =====================================================
 
         dados_novo = novo_exame.copy()
 
-
         if resposta_insert.data:
-
             dados_novo = resposta_insert.data[0]
 
-
-        exames_existentes.append(
-            dados_novo
-        )
-
-
-        # =====================================================
-        # NOVO EXAME MAIS RECENTE:
-        # EXCLUIR OS ANTIGOS
-        # =====================================================
+        exames_existentes.append(dados_novo)
 
         ids_antigos = []
-
         arquivos_antigos = []
-
         exames_substituidos = []
 
-
         for exame_existente in exames_anteriores:
-
             data_existente = converter_data_exame(
-                exame_existente.get(
-                    "data_exame"
-                )
+                exame_existente.get("data_exame")
             )
 
             if not data_existente:
-
                 continue
 
-
             if data_existente < data_novo_exame:
-
                 ids_antigos.append(
-                    exame_existente.get(
-                        "id"
-                    )
+                    exame_existente.get("id")
                 )
 
-                arquivo_antigo = (
-                    exame_existente.get(
-                        "arquivo_path"
-                    )
+                arquivo_antigo = exame_existente.get(
+                    "arquivo_path"
                 )
 
                 if arquivo_antigo:
-
                     arquivos_antigos.append(
                         arquivo_antigo
                     )
@@ -1966,34 +1036,21 @@ if st.button(
                     exame_existente
                 )
 
-
-        # =====================================================
-        # EXCLUIR REGISTROS ANTIGOS EM LOTE
-        # =====================================================
-
         exclusao_antigos_ok = True
 
-
         if ids_antigos:
-
             try:
-
                 executar_com_tentativa(
                     lambda: supabase.table(
                         "exames"
                     ).delete().eq(
-                        "hospital_id",
-                        user_id
+                        "hospital_id", user_id
                     ).in_(
-                        "id",
-                        ids_antigos
+                        "id", ids_antigos
                     ).execute()
                 )
-
-            except Exception as e:
-
+            except Exception:
                 exclusao_antigos_ok = False
-
 
                 mensagens.append(
                     (
@@ -2004,29 +1061,14 @@ if st.button(
                     )
                 )
 
-
-        # =====================================================
-        # REMOVER PDFs ANTIGOS EM LOTE
-        # =====================================================
-
-        if (
-            exclusao_antigos_ok
-            and
-            arquivos_antigos
-        ):
-
+        if exclusao_antigos_ok and arquivos_antigos:
             try:
-
                 executar_com_tentativa(
                     lambda: supabase.storage.from_(
                         "exames-pdf"
-                    ).remove(
-                        arquivos_antigos
-                    )
+                    ).remove(arquivos_antigos)
                 )
-
             except Exception:
-
                 mensagens.append(
                     (
                         "warning",
@@ -2036,184 +1078,101 @@ if st.button(
                     )
                 )
 
-
-        # =====================================================
-        # LIMPAR CACHE DOS PDFs ANTIGOS
-        # =====================================================
-
         for caminho in arquivos_antigos:
-
             st.session_state.cache_links_pdf.pop(
-                caminho,
-                None
+                caminho, None
             )
 
-
-        # =====================================================
-        # REMOVER ANTIGOS DA LISTA EM MEMÓRIA
-        # =====================================================
-
         if ids_antigos:
-
             exames_existentes = [
-
                 exame
                 for exame in exames_existentes
-
-                if exame.get(
-                    "id"
-                ) not in ids_antigos
-
+                if exame.get("id") not in ids_antigos
             ]
 
-
-        # =====================================================
-        # MENSAGEM DO RESULTADO
-        # =====================================================
-
         if exames_substituidos:
-
             exame_antigo_mais_recente = max(
                 exames_substituidos,
                 key=lambda x: (
                     converter_data_exame(
-                        x.get(
-                            "data_exame"
-                        )
-                    )
-                    or datetime.min
+                        x.get("data_exame")
+                    ) or datetime.min
                 )
             )
-
 
             data_antiga = converter_data_exame(
-                exame_antigo_mais_recente.get(
-                    "data_exame"
-                )
+                exame_antigo_mais_recente.get("data_exame")
             )
-
 
             mensagens.append(
                 (
                     "success",
-                    f"🔄 O exame {tipo_exame} do paciente "
-                    f"{nome} foi atualizado. "
-                    f"O exame anterior, realizado em "
-                    f"{formatar_data(data_antiga)}, "
-                    f"foi substituído."
+                    f"🔄 O exame {tipo_exame} do paciente {nome} "
+                    f"foi atualizado. O exame anterior, realizado em "
+                    f"{formatar_data(data_antiga)}, foi substituído."
                 )
             )
-
         else:
-
             mensagens.append(
                 (
                     "success",
-                    f"➕ O exame {tipo_exame} do paciente "
-                    f"{nome} foi cadastrado com sucesso."
+                    f"➕ O exame {tipo_exame} do paciente {nome} "
+                    f"foi cadastrado com sucesso."
                 )
             )
-
-
-    # ========================================================
-    # TRANSFORMAR RESULTADOS EM MODAL
-    # ========================================================
 
     if mensagens:
-
         st.session_state.modal_mensagem = "\n\n".join(
-            [
-                mensagem
-                for tipo, mensagem in mensagens
-            ]
+            [mensagem for tipo, mensagem in mensagens]
         )
-
-
-        # Escolhe o tipo visual de acordo com o resultado
 
         if any(
             tipo == "error"
             for tipo, mensagem in mensagens
         ):
-
             st.session_state.modal_tipo = "error"
-
         elif any(
             tipo == "warning"
             for tipo, mensagem in mensagens
         ):
-
             st.session_state.modal_tipo = "warning"
-
         elif any(
             tipo == "success"
             for tipo, mensagem in mensagens
         ):
-
             st.session_state.modal_tipo = "success"
-
         else:
-
             st.session_state.modal_tipo = "info"
-
 
         st.session_state.modal_titulo = (
             "Resultado do processamento"
         )
-
     else:
-
         abrir_modal(
             "Nenhum exame foi processado.",
             "Resultado do processamento",
             "info"
         )
 
-
     st.rerun()
 
 
-# ============================================================
-# TABELA
-# ============================================================
-
-st.subheader(
-    "Tabela de exames"
-)
+st.subheader("Tabela de exames")
 
 
 if not df.empty:
-
-    # ========================================================
-    # FILTROS
-    # ========================================================
-
-    col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(
-        3
-    )
-
-
-    # ========================================================
-    # FILTRO STATUS
-    # ========================================================
+    col_filtro_status, col_filtro_paciente, col_filtro_prontuario = st.columns(3)
 
     with col_filtro_status:
-
-        with st.popover(
-            "🔎 Status"
-        ):
-
+        with st.popover("🔎 Status"):
             filtro_status = st.radio(
-
                 "Mostrar:",
-
                 [
                     "Todos os exames",
                     "🔴 Vencidos",
                     "🟡 Em alerta",
                     "🟢 Válidos"
                 ],
-
                 index=[
                     "Todos os exames",
                     "🔴 Vencidos",
@@ -2222,569 +1181,287 @@ if not df.empty:
                 ].index(
                     st.session_state.filtro_status
                 ),
-
                 key="filtro_status_input"
-
             )
 
-            st.session_state.filtro_status = (
-                filtro_status
-            )
+            st.session_state.filtro_status = filtro_status
 
-
-        st.caption(
-            st.session_state.filtro_status
-        )
-
-
-    # ========================================================
-    # FILTRO PACIENTE
-    # ========================================================
+        st.caption(st.session_state.filtro_status)
 
     with col_filtro_paciente:
-
-        with st.popover(
-            "👤 Paciente"
-        ):
-
+        with st.popover("👤 Paciente"):
             paciente_busca = st.text_input(
-
                 "Buscar paciente",
-
                 value=st.session_state.busca_paciente,
-
                 placeholder="Digite o nome",
-
                 key="paciente_busca_input"
-
             )
 
-            st.session_state.busca_paciente = (
-                paciente_busca
-            )
-
+            st.session_state.busca_paciente = paciente_busca
 
         if st.session_state.busca_paciente:
-
             st.caption(
-                f"Paciente: "
-                f"{st.session_state.busca_paciente}"
+                f"Paciente: {st.session_state.busca_paciente}"
             )
-
         else:
-
-            st.caption(
-                "Nenhum paciente selecionado"
-            )
-
-
-    # ========================================================
-    # FILTRO PRONTUÁRIO
-    # ========================================================
+            st.caption("Nenhum paciente selecionado")
 
     with col_filtro_prontuario:
-
-        with st.popover(
-            "📋 Prontuário"
-        ):
-
+        with st.popover("📋 Prontuário"):
             prontuario_busca = st.text_input(
-
                 "Buscar prontuário",
-
                 value=st.session_state.busca_prontuario,
-
                 placeholder="Digite o número",
-
                 key="prontuario_busca_input"
-
             )
 
-            st.session_state.busca_prontuario = (
-                prontuario_busca
-            )
-
+            st.session_state.busca_prontuario = prontuario_busca
 
         if st.session_state.busca_prontuario:
-
             st.caption(
-                f"Prontuário: "
-                f"{st.session_state.busca_prontuario}"
+                f"Prontuário: {st.session_state.busca_prontuario}"
             )
-
         else:
+            st.caption("Nenhum prontuário selecionado")
 
-            st.caption(
-                "Nenhum prontuário selecionado"
-            )
-
-
-    filtro = (
-        st.session_state.filtro_status
-    )
-
-    paciente_busca = (
-        st.session_state.busca_paciente
-    )
-
-    prontuario_busca = (
-        st.session_state.busca_prontuario
-    )
-
-
-    # ========================================================
-    # FILTRO POR STATUS
-    # ========================================================
+    filtro = st.session_state.filtro_status
+    paciente_busca = st.session_state.busca_paciente
+    prontuario_busca = st.session_state.busca_prontuario
 
     if filtro == "🔴 Vencidos":
-
         df_tabela = df[
             df["status"].fillna("").str.contains(
-                "VENCIDO",
-                na=False
+                "VENCIDO", na=False
             )
         ]
-
     elif filtro == "🟡 Em alerta":
-
         df_tabela = df[
             df["status"].fillna("").str.contains(
-                "ALERTA",
-                na=False
+                "ALERTA", na=False
             )
         ]
-
     elif filtro == "🟢 Válidos":
-
         df_tabela = df[
             df["status"].fillna("").str.contains(
-                "VALIDO",
-                na=False
+                "VALIDO", na=False
             )
         ]
-
     else:
-
         df_tabela = df
 
-
-    # ========================================================
-    # FILTRO PACIENTE
-    # ========================================================
-
     if paciente_busca:
-
         df_tabela = df_tabela[
             df_tabela["paciente"]
             .fillna("")
             .astype(str)
             .str.contains(
-                re.escape(
-                    paciente_busca
-                ),
+                re.escape(paciente_busca),
                 case=False,
                 na=False
             )
         ]
 
-
-    # ========================================================
-    # FILTRO PRONTUÁRIO
-    # ========================================================
-
     if prontuario_busca:
-
         df_tabela = df_tabela[
-            df_tabela[
-                "prontuario_registro"
-            ]
+            df_tabela["prontuario_registro"]
             .fillna("")
             .astype(str)
             .str.contains(
-                re.escape(
-                    prontuario_busca
-                ),
+                re.escape(prontuario_busca),
                 case=False,
                 na=False
             )
         ]
 
-
-    # ========================================================
-    # PREPARAR TABELA
-    # ========================================================
-
     df_tabela = df_tabela.copy()
 
-
-    df_tabela["Excluir"] = (
-        df_tabela.index.isin(
-            st.session_state.exclusoes_pendentes
-        )
+    df_tabela["Excluir"] = df_tabela.index.isin(
+        st.session_state.exclusoes_pendentes
     )
-
-
-    # ========================================================
-    # LINKS DOS EXAMES
-    # ========================================================
 
     df_tabela["exame_link"] = df_tabela.apply(
         criar_link_pdf,
         axis=1
     )
 
-
     colunas = [
-
         "data_nascimento",
-
         "paciente",
-
         "prontuario_registro",
-
         "exame_link",
-
         "data_exame",
-
         "data_vencimento",
-
         "status",
-
         "Excluir"
-
     ]
 
-
-    # ========================================================
-    # CONTROLAR EXCLUSÕES
-    # ========================================================
-
     def atualizar_exclusoes():
-
         estado_editor = st.session_state.get(
-            "editor_exames",
-            {}
+            "editor_exames", {}
         )
 
         alteracoes = estado_editor.get(
-            "edited_rows",
-            {}
+            "edited_rows", {}
         )
 
         indices_visiveis = list(
             df_tabela.index
         )
 
-
-        for linha, valores in (
-            alteracoes.items()
-        ):
-
+        for linha, valores in alteracoes.items():
             try:
-
-                linha = int(
-                    linha
-                )
-
+                linha = int(linha)
 
                 if (
                     linha < 0
-                    or
-                    linha >= len(
-                        indices_visiveis
-                    )
+                    or linha >= len(indices_visiveis)
                 ):
-
                     continue
 
-
-                indice_df = (
-                    indices_visiveis[
-                        linha
-                    ]
-                )
-
+                indice_df = indices_visiveis[linha]
 
                 id_exame = df.loc[
-                    indice_df,
-                    "id"
+                    indice_df, "id"
                 ]
 
-
                 if "Excluir" in valores:
-
                     if valores["Excluir"]:
-
                         st.session_state.exclusoes_pendentes.add(
                             id_exame
                         )
-
                     else:
-
                         st.session_state.exclusoes_pendentes.discard(
                             id_exame
                         )
-
-
             except Exception:
-
                 pass
 
-
-    # ========================================================
-    # TABELA
-    # ========================================================
-
     tabela = st.data_editor(
-
         df_tabela[colunas],
-
         use_container_width=True,
-
         hide_index=True,
-
         disabled=[
-
             "data_nascimento",
-
             "paciente",
-
             "prontuario_registro",
-
             "exame_link",
-
             "data_exame",
-
             "data_vencimento",
-
             "status"
-
         ],
-
         column_config={
-
             "exame_link": st.column_config.LinkColumn(
-
                 "exame",
-
                 display_text=r".*#EXAME_(.*)"
-
             )
-
         },
-
         key="editor_exames",
-
         on_change=atualizar_exclusoes
-
     )
 
-
-    # ========================================================
-    # BOTÃO EXCLUIR
-    # ========================================================
-
     if st.session_state.exclusoes_pendentes:
-
-        if st.button(
-            "Excluir selecionados"
-        ):
-
+        if st.button("Excluir selecionados"):
             st.session_state.confirmar_exclusao = True
-
             st.rerun()
 
-
-    # ========================================================
-    # MODAL DE CONFIRMAÇÃO
-    # ========================================================
-
     if st.session_state.confirmar_exclusao:
-
-        @st.dialog(
-            "Pense bem!",
-            dismissible=False
-        )
+        @st.dialog("Pense bem!", dismissible=False)
         def mostrar_confirmacao_exclusao():
-
             quantidade = len(
                 st.session_state.exclusoes_pendentes
             )
 
-
             if quantidade == 1:
-
-                texto_quantidade = (
-                    "Você selecionou 1 exame."
-                )
-
+                texto_quantidade = "Você selecionou 1 exame."
             else:
-
                 texto_quantidade = (
                     f"Você selecionou {quantidade} exames."
                 )
 
-
-            st.write(
-                texto_quantidade
-            )
-
+            st.write(texto_quantidade)
 
             st.write(
                 "Tem certeza que deseja excluir os exames selecionados?"
             )
-
 
             st.write(
                 "O registro será removido do sistema "
                 "e o PDF correspondente também será excluído."
             )
 
-
             st.divider()
 
-
-            col_cancelar, col_confirmar = st.columns(
-                2
-            )
-
-
-            # =================================================
-            # CANCELAR
-            # =================================================
+            col_cancelar, col_confirmar = st.columns(2)
 
             with col_cancelar:
-
                 if st.button(
                     "Cancelar",
                     key="cancelar_exclusao",
                     use_container_width=True
                 ):
-
                     st.session_state.confirmar_exclusao = False
-
                     st.session_state.exclusoes_pendentes = set()
-
                     st.rerun()
 
-
-            # =================================================
-            # CONFIRMAR
-            # =================================================
-
             with col_confirmar:
-
                 if st.button(
                     "Confirmar exclusão",
                     key="botao_confirmar_exclusao",
                     use_container_width=True
                 ):
-
                     ids_excluir = list(
                         st.session_state.exclusoes_pendentes
                     )
 
-
-                    # =================================================
-                    # LOCALIZAR PDFs
-                    # =================================================
-
                     caminhos_pdfs = []
 
-
                     for id_excluir in ids_excluir:
-
                         exame_excluir = df[
                             df["id"] == id_excluir
                         ]
 
-
                         if not exame_excluir.empty:
-
-                            arquivo_path = (
-                                exame_excluir.iloc[0].get(
-                                    "arquivo_path"
-                                )
+                            arquivo_path = exame_excluir.iloc[0].get(
+                                "arquivo_path"
                             )
 
-
                             if arquivo_path:
-
                                 caminhos_pdfs.append(
                                     arquivo_path
                                 )
 
-
                     try:
-
-                        # =================================================
-                        # EXCLUIR DO BANCO EM UMA ÚNICA OPERAÇÃO
-                        # =================================================
-
                         executar_com_tentativa(
                             lambda: supabase.table(
                                 "exames"
                             ).delete().eq(
-                                "hospital_id",
-                                user_id
+                                "hospital_id", user_id
                             ).in_(
-                                "id",
-                                ids_excluir
+                                "id", ids_excluir
                             ).execute()
                         )
 
-
-                        # =================================================
-                        # EXCLUIR PDFs EM UMA ÚNICA OPERAÇÃO
-                        # =================================================
-
                         erro_storage = False
 
-
                         if caminhos_pdfs:
-
                             try:
-
                                 executar_com_tentativa(
                                     lambda: supabase.storage.from_(
                                         "exames-pdf"
-                                    ).remove(
-                                        caminhos_pdfs
-                                    )
+                                    ).remove(caminhos_pdfs)
                                 )
-
                             except Exception:
-
                                 erro_storage = True
 
-
-                        # =================================================
-                        # LIMPAR CACHE
-                        # =================================================
-
                         for caminho in caminhos_pdfs:
-
                             st.session_state.cache_links_pdf.pop(
-                                caminho,
-                                None
+                                caminho, None
                             )
 
-
-                        # =================================================
-                        # LIMPAR SELEÇÃO
-                        # =================================================
-
                         st.session_state.exclusoes_pendentes = set()
-
                         st.session_state.confirmar_exclusao = False
 
-
-                        # =================================================
-                        # RESULTADO
-                        # =================================================
-
                         if erro_storage:
-
                             abrir_modal(
                                 "Os exames foram excluídos da tabela, "
                                 "mas um ou mais PDFs não puderam ser "
@@ -2792,27 +1469,19 @@ if not df.empty:
                                 "Exclusão parcialmente concluída",
                                 "warning"
                             )
-
                         else:
-
                             abrir_modal(
                                 "Os exames selecionados foram excluídos com sucesso.",
                                 "Exclusão concluída",
                                 "success"
                             )
 
-
                         st.rerun()
 
-
                     except Exception as e:
-
                         st.session_state.confirmar_exclusao = False
 
-                        if eh_timeout_ou_erro_conexao(
-                            e
-                        ):
-
+                        if eh_timeout_ou_erro_conexao(e):
                             abrir_modal(
                                 "Houve uma demora na comunicação com o servidor. "
                                 "Nenhum exame deve ser removido até que a operação "
@@ -2820,24 +1489,15 @@ if not df.empty:
                                 "Não foi possível concluir a exclusão",
                                 "error"
                             )
-
                         else:
-
                             abrir_modal(
                                 f"Não foi possível excluir os exames.\n\n{e}",
                                 "Erro na exclusão",
                                 "error"
                             )
 
-
                         st.rerun()
 
-
         mostrar_confirmacao_exclusao()
-
-
 else:
-
-    st.info(
-        "Nenhum exame cadastrado"
-    )
+    st.info("Nenhum exame cadastrado")
