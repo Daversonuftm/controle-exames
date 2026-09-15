@@ -1117,7 +1117,7 @@ if st.button("Ler exames"):
             novos_exames_processamento.append(nome)
 
     # ========================================================
-    # RESUMO COMPACTO DO PROCESSAMENTO
+    # RESUMO DO PROCESSAMENTO
     # ========================================================
 
     quantidade_erros = sum(
@@ -1139,74 +1139,70 @@ if st.button("Ler exames"):
             novos_por_paciente.get(paciente_novo, 0) + 1
         )
 
-    linhas_resumo = []
+    linhas_resumo = [
+        "Processamento concluído",
+        "",
+        "Novos exames:"
+    ]
 
     if novos_por_paciente:
-        linhas_resumo.append("**Novos exames**")
-
         for paciente_novo, quantidade_nova in novos_por_paciente.items():
-            palavra_exame = "exame" if quantidade_nova == 1 else "exames"
+            palavra_exame = (
+                "exame" if quantidade_nova == 1 else "exames"
+            )
             linhas_resumo.append(
                 f"• {paciente_novo}: {quantidade_nova} {palavra_exame}"
             )
+    else:
+        linhas_resumo.append(
+            "• Nenhum exame novo foi cadastrado."
+        )
+
+    linhas_resumo += [
+        "",
+        "Exames atualizados:"
+    ]
 
     if detalhes_atualizados:
-        linhas_resumo.append("")
-
-        if quantidade_atualizados == 1:
-            linhas_resumo.append("**Exame atualizado**")
-        else:
-            linhas_resumo.append("**Exames atualizados**")
-
         for tipo_exame, paciente, data_antiga, data_nova in detalhes_atualizados:
             linhas_resumo.append(
                 f"• {tipo_exame} — {paciente} — "
                 f"{data_antiga} → {data_nova}"
             )
+    else:
+        linhas_resumo.append(
+            "• Nenhum exame foi atualizado."
+        )
 
     if quantidade_ignorados > 0:
         linhas_resumo.append("")
 
         if quantidade_ignorados == 1:
             linhas_resumo.append(
-                "• 1 exame não foi cadastrado, pois já havia "
-                "uma versão igual ou mais recente."
+                "1 exame não foi cadastrado, pois já havia uma versão "
+                "igual ou mais recente."
             )
         else:
             linhas_resumo.append(
-                f"• {quantidade_ignorados} exames não foram cadastrados, "
+                f"{quantidade_ignorados} exames não foram cadastrados, "
                 "pois já havia uma versão igual ou mais recente."
             )
 
-    for tipo, mensagem in mensagens:
-        if tipo in ("error", "warning"):
-            linhas_resumo.append(mensagem)
+    linhas_resumo += [
+        "",
+        "Erros:"
+    ]
 
-    linhas_resumo.append("")
-
-    if quantidade_erros == 0 and quantidade_alertas == 0:
-        linhas_resumo.append("**Erros**")
-        linhas_resumo.append("• Nenhum erro encontrado.")
-    else:
-        linhas_resumo.append("**Resultado**")
-
-        if quantidade_alertas > 0:
-            linhas_resumo.append(
-                f"• {quantidade_alertas} aviso(s)."
-            )
-
-        if quantidade_erros > 0:
-            linhas_resumo.append(
-                f"• {quantidade_erros} erro(s)."
-            )
-
-    if not novos_por_paciente and not detalhes_atualizados and quantidade_ignorados == 0 and not mensagens:
-        linhas_resumo = [
-            "Nenhum exame foi processado.",
-            "",
-            "**Erros**",
+    if quantidade_erros == 0:
+        linhas_resumo.append(
             "• Nenhum erro encontrado."
-        ]
+        )
+    else:
+        for tipo, mensagem in mensagens:
+            if tipo == "error":
+                linhas_resumo.append(
+                    f"• {mensagem}"
+                )
 
     st.session_state.modal_mensagem = "\n".join(linhas_resumo)
 
@@ -1219,7 +1215,7 @@ if st.button("Ler exames"):
     else:
         st.session_state.modal_tipo = "info"
 
-    st.session_state.modal_titulo = "Resultado do processamento"
+    st.session_state.modal_titulo = "Resultado"
 
     st.rerun()
 
