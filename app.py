@@ -816,6 +816,7 @@ if st.button("Ler exames"):
     quantidade_atualizados = 0
     quantidade_ignorados = 0
     detalhes_atualizados = []
+    novos_exames_processamento = []
 
     for arquivo in arquivos:
         try:
@@ -1113,6 +1114,7 @@ if st.button("Ler exames"):
             quantidade_atualizados += 1
         else:
             quantidade_cadastrados += 1
+            novos_exames_processamento.append(nome)
 
     # ========================================================
     # RESUMO COMPACTO DO PROCESSAMENTO
@@ -1130,62 +1132,81 @@ if st.button("Ler exames"):
         if tipo == "warning"
     )
 
-    detalhes = []
+    novos_por_paciente = {}
+
+    for paciente_novo in novos_exames_processamento:
+        novos_por_paciente[paciente_novo] = (
+            novos_por_paciente.get(paciente_novo, 0) + 1
+        )
+
+    linhas_resumo = []
+
+    if novos_por_paciente:
+        linhas_resumo.append("**Novos exames**")
+
+        for paciente_novo, quantidade_nova in novos_por_paciente.items():
+            palavra_exame = "exame" if quantidade_nova == 1 else "exames"
+            linhas_resumo.append(
+                f"• {paciente_novo}: {quantidade_nova} {palavra_exame}"
+            )
 
     if detalhes_atualizados:
+        linhas_resumo.append("")
+
         if quantidade_atualizados == 1:
-            detalhes.append("🔄 Exame atualizado:")
+            linhas_resumo.append("**Exame atualizado**")
         else:
-            detalhes.append("🔄 Exames atualizados:")
+            linhas_resumo.append("**Exames atualizados**")
 
         for tipo_exame, paciente, data_antiga, data_nova in detalhes_atualizados:
-            detalhes.append(
+            linhas_resumo.append(
                 f"• {tipo_exame} — {paciente} — "
                 f"{data_antiga} → {data_nova}"
             )
 
     if quantidade_ignorados > 0:
-        detalhes.append("")
+        linhas_resumo.append("")
+
         if quantidade_ignorados == 1:
-            detalhes.append(
-                "ℹ️ 1 exame não foi cadastrado, pois já havia "
+            linhas_resumo.append(
+                "• 1 exame não foi cadastrado, pois já havia "
                 "uma versão igual ou mais recente."
             )
         else:
-            detalhes.append(
-                f"ℹ️ {quantidade_ignorados} exames não foram cadastrados, "
+            linhas_resumo.append(
+                f"• {quantidade_ignorados} exames não foram cadastrados, "
                 "pois já havia uma versão igual ou mais recente."
             )
 
     for tipo, mensagem in mensagens:
         if tipo in ("error", "warning"):
-            detalhes.append(mensagem)
+            linhas_resumo.append(mensagem)
 
-    linhas_resumo = []
+    linhas_resumo.append("")
 
-    if quantidade_cadastrados > 0:
-        linhas_resumo.append(
-            f"✅ {quantidade_cadastrados} "
-            f"exame(s) cadastrado(s)."
-        )
-
-    if detalhes:
-        linhas_resumo.extend(detalhes)
-
-    if quantidade_alertas == 0 and quantidade_erros == 0:
-        linhas_resumo.append("Nenhum erro foi encontrado.")
+    if quantidade_erros == 0 and quantidade_alertas == 0:
+        linhas_resumo.append("**Erros**")
+        linhas_resumo.append("• Nenhum erro encontrado.")
     else:
+        linhas_resumo.append("**Resultado**")
+
         if quantidade_alertas > 0:
             linhas_resumo.append(
-                f"⚠️ {quantidade_alertas} aviso(s)."
-            )
-        if quantidade_erros > 0:
-            linhas_resumo.append(
-                f"❌ {quantidade_erros} erro(s)."
+                f"• {quantidade_alertas} aviso(s)."
             )
 
-    if not linhas_resumo:
-        linhas_resumo.append("Nenhum exame foi processado.")
+        if quantidade_erros > 0:
+            linhas_resumo.append(
+                f"• {quantidade_erros} erro(s)."
+            )
+
+    if not novos_por_paciente and not detalhes_atualizados and quantidade_ignorados == 0 and not mensagens:
+        linhas_resumo = [
+            "Nenhum exame foi processado.",
+            "",
+            "**Erros**",
+            "• Nenhum erro encontrado."
+        ]
 
     st.session_state.modal_mensagem = "\n".join(linhas_resumo)
 
