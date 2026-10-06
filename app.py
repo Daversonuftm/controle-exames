@@ -63,15 +63,6 @@ if "modal_titulo" not in st.session_state:
 if "modal_tipo" not in st.session_state:
     st.session_state.modal_tipo = "info"
 
-if "mostrar_toast_status" not in st.session_state:
-    st.session_state.mostrar_toast_status = False
-
-if "texto_toast_status" not in st.session_state:
-    st.session_state.texto_toast_status = ""
-
-if "ultima_verificacao_automatica" not in st.session_state:
-    st.session_state.ultima_verificacao_automatica = None
-
 
 def abrir_modal(mensagem, titulo="Aviso", tipo="info"):
     st.session_state.modal_mensagem = mensagem
@@ -145,10 +136,24 @@ def atualizar_status_exames(user_id):
 
     for exame in exames:
         try:
-            data_vencimento = datetime.strptime(
-                exame["data_vencimento"],
-                "%d/%m/%Y"
-            )
+            valor_data = exame["data_vencimento"]
+
+            if isinstance(valor_data, datetime):
+                data_vencimento = valor_data
+            else:
+                data_vencimento = None
+                for formato in ("%d/%m/%Y", "%Y-%m-%d"):
+                    try:
+                        data_vencimento = datetime.strptime(
+                            str(valor_data),
+                            formato
+                        )
+                        break
+                    except ValueError:
+                        pass
+
+                if data_vencimento is None:
+                    continue
 
             novo_status = calcular_status(data_vencimento)
             status_atual = exame.get("status")
@@ -507,6 +512,15 @@ if "user" not in st.session_state:
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
+if "ultima_verificacao_automatica" not in st.session_state:
+    st.session_state.ultima_verificacao_automatica = None
+
+if "mostrar_toast_atualizacao" not in st.session_state:
+    st.session_state.mostrar_toast_atualizacao = False
+
+if "mensagem_toast_atualizacao" not in st.session_state:
+    st.session_state.mensagem_toast_atualizacao = None
+
 if "filtro_status" not in st.session_state:
     st.session_state.filtro_status = "Todos os exames"
 
@@ -524,6 +538,14 @@ if "confirmar_exclusao" not in st.session_state:
 
 
 st.title("Sistema de Controle de Exames")
+
+
+if st.session_state.mostrar_toast_atualizacao:
+    mensagem_toast = st.session_state.mensagem_toast_atualizacao
+    st.session_state.mostrar_toast_atualizacao = False
+    st.session_state.mensagem_toast_atualizacao = None
+    if mensagem_toast:
+        st.toast(mensagem_toast, icon="✅")
 
 
 if st.session_state.modal_mensagem:
@@ -569,13 +591,8 @@ if not st.session_state.user:
 
             atualizar_status_exames(user_id_login)
 
-            agora_login = datetime.now(
+            st.session_state.ultima_verificacao_automatica = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
-            )
-            st.session_state.ultima_verificacao_automatica = agora_login
-            st.session_state.mostrar_toast_status = True
-            st.session_state.texto_toast_status = (
-                "Exames verificados e status atualizados ao entrar no sistema."
             )
 
             st.session_state.user = resposta_login
@@ -655,15 +672,6 @@ if not st.session_state.user:
 user_id = st.session_state.user.user.id
 
 
-if st.session_state.mostrar_toast_status:
-    st.toast(
-        st.session_state.texto_toast_status,
-        icon="✅"
-    )
-    st.session_state.mostrar_toast_status = False
-    st.session_state.texto_toast_status = ""
-
-
 try:
     res = executar_com_tentativa(
         lambda: supabase.table(
@@ -735,27 +743,28 @@ c3.metric("🟢 VÁLIDOS", validos)
 @st.fragment(run_every="1h")
 def verificacao_automatica_status():
     agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    ultima_verificacao = st.session_state.ultima_verificacao_automatica
+    ultima = st.session_state.ultima_verificacao_automatica
 
-    if ultima_verificacao is not None:
-        segundos_desde_ultima = (agora - ultima_verificacao).total_seconds()
-
-        if segundos_desde_ultima < 3300:
+    if ultima is not None:
+        segundos = (agora - ultima).total_seconds()
+        if segundos < 60:
             return
-
-    st.session_state.ultima_verificacao_automatica = agora
 
     try:
         houve_alteracao = atualizar_status_exames(user_id)
 
+        st.session_state.ultima_verificacao_automatica = agora
+
         if houve_alteracao:
-            st.session_state.mostrar_toast_status = True
-            st.session_state.texto_toast_status = (
+            st.session_state.mostrar_toast_atualizacao = True
+            st.session_state.mensagem_toast_atualizacao = (
                 "Os status dos exames foram atualizados automaticamente."
             )
             st.rerun(scope="app")
     except Exception:
+        st.session_state.ultima_verificacao_automatica = agora
         pass
+
 
 verificacao_automatica_status()
 
@@ -765,17 +774,17 @@ col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
 with col_atualizar:
     if st.button("Atualizar status"):
         try:
-            atualizar_status_exames(user_id)
+            houve_alteracao = atualizar_status_exames(user_id)
 
-            agora_atualizacao = datetime.now(
+            agora = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
             )
 
-            st.session_state.ultima_atualizacao = agora_atualizacao
-            st.session_state.ultima_verificacao_automatica = agora_atualizacao
-            st.session_state.mostrar_toast_status = True
-            st.session_state.texto_toast_status = (
-                "Os status dos exames foram atualizados com sucesso."
+            st.session_state.ultima_atualizacao = agora
+            st.session_state.ultima_verificacao_automatica = agora
+            st.session_state.mostrar_toast_atualizacao = True
+            st.session_state.mensagem_toast_atualizacao = (
+                "Os status dos exames foram atualizados."
             )
 
             st.rerun()
