@@ -117,6 +117,23 @@ def calcular_status(data_vencimento):
     return "🟢 VALIDO"
 
 
+def converter_data_vencimento(data):
+    if not data:
+        return None
+
+    if isinstance(data, datetime):
+        return data
+
+    if isinstance(data, str):
+        for formato in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(data[:10], formato)
+            except Exception:
+                pass
+
+    return None
+
+
 def atualizar_status_exames(user_id):
     resposta = executar_com_tentativa(
         lambda: supabase.table(
@@ -136,24 +153,12 @@ def atualizar_status_exames(user_id):
 
     for exame in exames:
         try:
-            valor_data = exame["data_vencimento"]
+            data_vencimento = converter_data_vencimento(
+                exame.get("data_vencimento")
+            )
 
-            if isinstance(valor_data, datetime):
-                data_vencimento = valor_data
-            else:
-                data_vencimento = None
-                for formato in ("%d/%m/%Y", "%Y-%m-%d"):
-                    try:
-                        data_vencimento = datetime.strptime(
-                            str(valor_data),
-                            formato
-                        )
-                        break
-                    except ValueError:
-                        pass
-
-                if data_vencimento is None:
-                    continue
+            if not data_vencimento:
+                continue
 
             novo_status = calcular_status(data_vencimento)
             status_atual = exame.get("status")
@@ -512,15 +517,6 @@ if "user" not in st.session_state:
 if "ultima_atualizacao" not in st.session_state:
     st.session_state.ultima_atualizacao = None
 
-if "ultima_verificacao_automatica" not in st.session_state:
-    st.session_state.ultima_verificacao_automatica = None
-
-if "mostrar_toast_atualizacao" not in st.session_state:
-    st.session_state.mostrar_toast_atualizacao = False
-
-if "mensagem_toast_atualizacao" not in st.session_state:
-    st.session_state.mensagem_toast_atualizacao = None
-
 if "filtro_status" not in st.session_state:
     st.session_state.filtro_status = "Todos os exames"
 
@@ -536,16 +532,14 @@ if "exclusoes_pendentes" not in st.session_state:
 if "confirmar_exclusao" not in st.session_state:
     st.session_state.confirmar_exclusao = False
 
+if "ultima_verificacao_automatica" not in st.session_state:
+    st.session_state.ultima_verificacao_automatica = None
+
+if "status_atualizado_no_login" not in st.session_state:
+    st.session_state.status_atualizado_no_login = False
+
 
 st.title("Sistema de Controle de Exames")
-
-
-if st.session_state.mostrar_toast_atualizacao:
-    mensagem_toast = st.session_state.mensagem_toast_atualizacao
-    st.session_state.mostrar_toast_atualizacao = False
-    st.session_state.mensagem_toast_atualizacao = None
-    if mensagem_toast:
-        st.toast(mensagem_toast, icon="✅")
 
 
 if st.session_state.modal_mensagem:
@@ -591,12 +585,14 @@ if not st.session_state.user:
 
             atualizar_status_exames(user_id_login)
 
+            st.session_state.user = resposta_login
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            )
+            st.session_state.status_atualizado_no_login = True
             st.session_state.ultima_verificacao_automatica = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
             )
-
-            st.session_state.user = resposta_login
-            st.session_state.ultima_atualizacao = None
             st.session_state.exclusoes_pendentes = set()
             st.session_state.confirmar_exclusao = False
             st.session_state.modal_mensagem = None
@@ -685,6 +681,15 @@ try:
 
     df = pd.DataFrame(res.data or [])
 
+    if not df.empty and "data_vencimento" in df.columns:
+        df["status"] = df["data_vencimento"].apply(
+            lambda data: (
+                calcular_status(converter_data_vencimento(data))
+                if converter_data_vencimento(data)
+                else ""
+            )
+        )
+
 except Exception as e:
     if eh_timeout_ou_erro_conexao(e):
         abrir_modal(
@@ -742,27 +747,25 @@ c3.metric("🟢 VÁLIDOS", validos)
 
 @st.fragment(run_every="1h")
 def verificacao_automatica_status():
-    agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    ultima = st.session_state.ultima_verificacao_automatica
+    try:
+        agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
+        ultima = st.session_state.ultima_verificacao_automatica
 
-    if ultima is not None:
-        segundos = (agora - ultima).total_seconds()
-        if segundos < 60:
+        # Impede que o rerun provocado pela própria atualização
+        # execute a atualização automática novamente em sequência.
+        if ultima is not None and (agora - ultima).total_seconds() < 60:
             return
 
-    try:
         houve_alteracao = atualizar_status_exames(user_id)
-
         st.session_state.ultima_verificacao_automatica = agora
 
         if houve_alteracao:
-            st.session_state.mostrar_toast_atualizacao = True
-            st.session_state.mensagem_toast_atualizacao = (
-                "Os status dos exames foram atualizados automaticamente."
+            st.toast(
+                "Os status dos exames foram atualizados automaticamente.",
+                icon="✅"
             )
             st.rerun(scope="app")
     except Exception:
-        st.session_state.ultima_verificacao_automatica = agora
         pass
 
 
@@ -774,19 +777,19 @@ col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
 with col_atualizar:
     if st.button("Atualizar status"):
         try:
-            houve_alteracao = atualizar_status_exames(user_id)
+            atualizar_status_exames(user_id)
 
-            agora = datetime.now(
+            st.session_state.ultima_atualizacao = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            )
+            st.session_state.ultima_verificacao_automatica = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
             )
 
-            st.session_state.ultima_atualizacao = agora
-            st.session_state.ultima_verificacao_automatica = agora
-            st.session_state.mostrar_toast_atualizacao = True
-            st.session_state.mensagem_toast_atualizacao = (
-                "Os status dos exames foram atualizados."
+            st.toast(
+                "Os status dos exames foram atualizados.",
+                icon="✅"
             )
-
             st.rerun()
 
         except Exception as e:
@@ -826,6 +829,8 @@ with col_sair:
         st.session_state.confirmar_exclusao = False
         st.session_state.modal_mensagem = None
         st.session_state.cache_links_pdf = {}
+        st.session_state.ultima_verificacao_automatica = None
+        st.session_state.status_atualizado_no_login = False
 
         st.rerun()
 
