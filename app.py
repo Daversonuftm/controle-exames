@@ -63,6 +63,12 @@ if "modal_titulo" not in st.session_state:
 if "modal_tipo" not in st.session_state:
     st.session_state.modal_tipo = "info"
 
+if "mostrar_toast_status" not in st.session_state:
+    st.session_state.mostrar_toast_status = False
+
+if "texto_toast_status" not in st.session_state:
+    st.session_state.texto_toast_status = ""
+
 
 def abrir_modal(mensagem, titulo="Aviso", tipo="info"):
     st.session_state.modal_mensagem = mensagem
@@ -560,6 +566,11 @@ if not st.session_state.user:
 
             atualizar_status_exames(user_id_login)
 
+            st.session_state.mostrar_toast_status = True
+            st.session_state.texto_toast_status = (
+                "Exames verificados e status atualizados ao entrar no sistema."
+            )
+
             st.session_state.user = resposta_login
             st.session_state.ultima_atualizacao = None
             st.session_state.exclusoes_pendentes = set()
@@ -636,6 +647,14 @@ if not st.session_state.user:
 
 user_id = st.session_state.user.user.id
 
+if st.session_state.mostrar_toast_status:
+    st.toast(
+        st.session_state.texto_toast_status,
+        icon="✅"
+    )
+    st.session_state.mostrar_toast_status = False
+    st.session_state.texto_toast_status = ""
+
 
 try:
     res = executar_com_tentativa(
@@ -705,26 +724,17 @@ c2.metric("🟡 EM ALERTA", alerta)
 c3.metric("🟢 VÁLIDOS", validos)
 
 
-@st.fragment(run_every="1h")
-def verificacao_automatica_status():
-    try:
-        houve_alteracao = atualizar_status_exames(user_id)
-
-        if houve_alteracao:
-            st.rerun(scope="app")
-    except Exception:
-        pass
-
-
-verificacao_automatica_status()
-
-
 col_atualizar, col_espaco, col_sair = st.columns([1, 5, 1])
 
 with col_atualizar:
     if st.button("Atualizar status"):
         try:
             atualizar_status_exames(user_id)
+
+            st.session_state.mostrar_toast_status = True
+            st.session_state.texto_toast_status = (
+                "Os status dos exames foram atualizados com sucesso."
+            )
 
             st.session_state.ultima_atualizacao = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
@@ -1566,3 +1576,20 @@ if not df.empty:
         mostrar_confirmacao_exclusao()
 else:
     st.info("Nenhum exame cadastrado")
+
+@st.fragment(run_every="1h")
+def verificacao_automatica_status():
+    try:
+        houve_alteracao = atualizar_status_exames(user_id)
+
+        if houve_alteracao:
+            st.session_state.mostrar_toast_status = True
+            st.session_state.texto_toast_status = (
+                "Os status dos exames foram atualizados automaticamente."
+            )
+            st.rerun(scope="app")
+    except Exception:
+        pass
+
+
+verificacao_automatica_status()
