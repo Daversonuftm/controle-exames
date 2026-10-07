@@ -550,6 +550,12 @@ if st.session_state.modal_mensagem:
 if not st.session_state.user:
     st.subheader("Login")
 
+    DOMINIOS_PERMITIDOS = (
+        "@uftm.edu.br",
+        "@ebserh.gov.br",
+        "@hubrasil.gov.br",
+    )
+
     with st.form("form_login"):
         email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
@@ -622,6 +628,20 @@ if not st.session_state.user:
             abrir_modal(
                 "Digite o email e a senha para realizar o cadastro.",
                 "Dados incompletos",
+                "warning"
+            )
+            st.rerun()
+
+        dominio_permitido = email.strip().lower().endswith(DOMINIOS_PERMITIDOS)
+
+        if not dominio_permitido:
+            abrir_modal(
+                "O cadastro não é permitido para este endereço de email.\n\n"
+                "Utilize um email institucional com um dos seguintes domínios:\n"
+                "• @uftm.edu.br\n"
+                "• @ebserh.gov.br\n"
+                "• @hubrasil.gov.br",
+                "Cadastro não permitido",
                 "warning"
             )
             st.rerun()
